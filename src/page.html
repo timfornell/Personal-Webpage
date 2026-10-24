@@ -565,7 +565,7 @@ function openSession(id){
   if(x.sets.length){
     const mx=Math.max(...x.sets.map(s=>s.reps||0),1);
     html += '<section class="card"><h2>Övningar <small>enligt klockan</small></h2><div class="ex">' + x.sets.slice().sort((a,b)=>(b.reps||0)-(a.reps||0)).map(s=>
-      '<div class="r"><span>' + esc(moveLabel(s.category)) + '</span><em>' + num(s.reps) + ' reps · ' + num(s.sets) + ' set' + (s.duration ? ' · ' + clock(s.duration/1000) : '') + (s.maxWeight ? ' · max ' + num(s.maxWeight/1000,1) + ' kg' : '') + '</em><div class="t"><span style="width:' + ((s.reps||0)/mx*100).toFixed(1) + '%"></span></div></div>').join("") + '</div></section>';
+      '<div class="r"><span>' + esc(moveLabel(s.category)) + '</span><em>' + num(s.reps) + ' reps · ' + num(s.sets) + ' set' + (s.duration ? ' · ' + clock(s.duration/1000) : '') + '</em><div class="t"><span style="width:' + ((s.reps||0)/mx*100).toFixed(1) + '%"></span></div></div>').join("") + '</div></section>';
   }
 
   html += '<section class="card" id="det"><h2>Fler detaljer</h2><div class="note"><span class="spin"></span>Hämtar från Garmin …</div></section>';
