@@ -4,14 +4,14 @@ Tims personliga webbplats. Första delen är en träningsdashboard som hämtar G
 
 Sidan har fyra flikar:
 
-- **Översikt:** dagens beredskap med skäl, vilotid och förslag på pass från Persist-arkivet, nyckeltal, återhämtning (HRV mot ditt band, vilopuls, sömn), form och trötthet, tid per vecka, monotoni och strain, pulszoner, kalender och senaste passen.
+- **Översikt:** dagens plan med vad du bör göra och undvika, utifrån mätvärdena och vilka kroppsdelar dina senaste pass belastat, och förslag på pass från Persist-arkivet, nyckeltal, återhämtning (HRV mot ditt band, vilopuls, sömn), form och trötthet, tid per vecka, monotoni och strain, pulszoner, kalender och senaste passen.
 - **Pass:** alla pass med sök, typfilter, sortering på valfritt mått och sparade vyer (filter, sortering och diagram). Varje pass öppnas med mått enligt passtypens profil, vilotid, puls över tid från FIT-filen (Banister TRIMP, aerob avkoppling), jämförelse mot liknande pass och loggat CrossFit-pass.
 - **Trender:** kort per passtyp, till exempel effektivitetsfaktor, puls vid fast tempo, löpvolym och intensitetsfördelning för löpning, och TRIMP, zon 4–5, benchmarks och rörelser för HIIT.
 - **Data:** lagring, vad Garmin svarar för dygnsdata, puls för beräkningar, Persist-import, inställningar som JSON och datakartan.
 
 Allt på Översikt och Trender går att anpassa i webbläsaren med knappen **Anpassa**: flytta, dölj och lägg till egna kort. Trender har en egen layout per passgrupp. Inställningarna sparas i databasen.
 
-TRIMP är Edwards TRIMP: minuter i varje pulszon gånger zonens nummer. Metodval och källor finns i dokumentet Träningsmetriker och datalagring.
+Belastning (TRIMP) är Edwards TRIMP: varje minut i pulszon 1–5 ger 1–5 poäng, så 10 minuter i zon 4 ger 40. Metodval och källor finns i dokumentet Träningsmetriker och datalagring.
 
 ## Struktur
 
@@ -19,7 +19,7 @@ TRIMP är Edwards TRIMP: minuter i varje pulszon gånger zonens nummer. Metodval
 | --- | --- |
 | `src/index.js` | Cloudflare Worker: Access-kontroll, Garmin, lagring i D1, loggade pass, Persist-arkivet |
 | `src/page.html` | Sidans HTML och CSS. Klientkoden läggs in där `/*APP*/` står |
-| `src/client/*.client.js` | Klientkoden: grunder, diagram, metriker, FIT-läsning, vyer, anpassning, loggning, start |
+| `src/client/*.client.js` | Klientkoden: grunder, diagram, metriker, FIT-läsning, vyer, dagens plan, anpassning, loggning, start |
 | `wrangler.toml` | Cloudflare-konfiguration |
 | `test/run.mjs` | Tester mot låtsade Garmin-, Access- och Claude-svar (`npm test`) |
 

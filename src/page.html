@@ -208,6 +208,15 @@ textarea{font:15px/1.4 var(--f-body); color:var(--ink); background:var(--surface
 .form input, .form select{min-width:0; width:100%}
 .editing .card > h2{display:none}
 .metrics.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.plan{display:grid; grid-template-columns:minmax(0,1fr); gap:4px}
+@media (min-width:600px){ .plan{grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px} }
+.pl{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
+.pi{display:grid; grid-template-columns:22px 1fr; gap:6px; align-items:start; font-size:15px}
+.pi b{display:block; font-weight:600}
+.pi .sub{display:block; margin-top:2px}
+.pm{width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; margin-top:1px}
+.pi.do .pm{background:color-mix(in srgb, var(--good) 18%, transparent); color:var(--good)}
+.pi.avoid .pm{background:color-mix(in srgb, var(--bad) 15%, transparent); color:var(--bad)}
 </style>
 </head>
 <body>
