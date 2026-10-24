@@ -12,8 +12,7 @@ globs = ["**/*.html"]
 fallthrough = true
 
 # D1-databasen som sparar de senaste två månadernas pass och dina inställningar.
-# Ta bort # på de fyra raderna och fyll i database_id när databasen är skapad.
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "personal-webpage"
-# database_id = ""
+[[d1_databases]]
+binding = "DB"
+database_name = "personal-webpage"
+database_id = "b1ecbffc-8928-44ca-8670-4a637682b58a"
