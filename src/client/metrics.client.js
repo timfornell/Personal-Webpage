@@ -8,8 +8,8 @@ const METRICS = [
   { id:"speed", label:"Fart", unit:"km/h", get:x => x.speed > 0 ? x.speed*3.6 : null, dec:1, agg:"avg" },
   { id:"avgHR", label:"Snittpuls", unit:"bpm", get:x => x.avgHR || null, agg:"avg" },
   { id:"maxHR", label:"Maxpuls", unit:"bpm", get:x => x.maxHR || null, agg:"max" },
-  { id:"trimp", label:"TRIMP", unit:"", get:x => x.zp, agg:"sum", desc:"Edwards TRIMP: minuter i varje pulszon gånger zonens nummer" },
-  { id:"trimph", label:"TRIMP per timme", get:x => x.zp != null && x.dur > 0 ? x.zp/(x.dur/3600) : null, agg:"avg" },
+  { id:"trimp", label:"Belastning (TRIMP)", unit:"", get:x => x.zp, agg:"sum", desc:"Edwards TRIMP: minuter i varje pulszon gånger zonens nummer" },
+  { id:"trimph", label:"Belastning per timme", get:x => x.zp != null && x.dur > 0 ? x.zp/(x.dur/3600) : null, agg:"avg" },
   { id:"z45", label:"Andel zon 4–5", unit:"%", get:x => x.z45 != null ? x.z45*100 : null, agg:"avg" },
   { id:"z12", label:"Andel zon 1–2", unit:"%", get:x => x.z12 != null ? x.z12*100 : null, agg:"avg" },
   { id:"ef", label:"Effektivitetsfaktor", get:x => x.ef, dec:2, agg:"avg", desc:"Meter per minut delat med snittpuls, bara lugna löppass" },
@@ -40,7 +40,7 @@ const DMETRICS = [
   { id:"bbHigh", label:"Body Battery, högsta", get:d => d.bbHigh, agg:"avg" },
   { id:"bbWake", label:"Body Battery vid uppvaknande", get:d => d.bbWake, agg:"avg" },
   { id:"steps", label:"Steg", get:d => d.steps, agg:"avg" },
-  { id:"dload", label:"TRIMP per dag", get:d => d.load, agg:"sum" },
+  { id:"dload", label:"Belastning (TRIMP) per dag", get:d => d.load, agg:"sum" },
 ];
 const DMET = Object.fromEntries(DMETRICS.map(m => [m.id, m]));
 
