@@ -39,26 +39,13 @@ const nWeeksFor = days => Math.min(52, Math.max(8, Math.ceil(days/7)));
 
 const CARDS = {
   // ----- Översikt -----
-  today: { title: "I dag", tabs: ["oversikt"], render(b){
-    const R = readiness();
-    const dot = s => '<span class="dot" style="background:' + (s === 2 ? "var(--bad)" : s === 1 ? "var(--warn)" : "var(--good)") + '"></span>';
-    let h = '<div class="verdict"><span class="pill ' + R.L.cls + '" style="font-size:15px;padding:4px 12px">' + R.L.name + '</span><span>' + esc(R.L.txt) + '</span></div>';
-    h += '<ul class="why">' + R.why.map(w => '<li>' + dot(w.sev) + esc(w.txt) + '</li>').join("") + '</ul>';
-    if(R.rec){
-      h += '<div class="sub" style="margin-top:8px">Vilotid efter <b>' + esc(R.rec.x.name) + '</b> (' + esc(dateTxt(R.rec.x.date)) + '): ' + R.rec.h + ' h, ' + esc(R.rec.method) + '. ' + (R.rec.left > 0 ? 'Klar om cirka ' + num(R.rec.left) + ' h.' : 'Redan klar.') + '</div>';
-    }
-    h += '<h3 class="h3">Förslag</h3><div class="sugg"></div>';
-    if(R.easyLow && R.level >= 1) h += '<div class="sub" style="margin-top:6px">Du har ' + num(R.easyMin) + ' minuter i zon 1–2 senaste sju dagarna. En lugn löprunda i zon 1–2 fyller på den lätta delen av fördelningen.</div>';
-    h += '<details class="how"><summary>Så räknas det</summary><p>HRV: 7-dagarssnittet av ln(HRV) jämförs med medelvärdet ± 0,5 standardavvikelser för de 28 dagarna innan. Det är upplägget från studierna om HRV-styrd träning. Under bandet en dag ger Lätt, två dagar i rad med förhöjd vilopuls eller kort sömn ger Vila.</p><p>Vilopuls förhöjd: 7-dagarssnittet minst 5 % och 2 slag över baslinjen. Kort sömn: under 6 timmar eller under 85 % av din median. Hög belastning: form under −30 % av kronisk nivå. Vilotid kvar över 24 h ger högst Medel, över 48 h högst Lätt. Gränserna utöver HRV-bandet är startvärden, inte forskningsresultat.</p></details>';
-    b.innerHTML = h;
-    loadSuggestions(R, b.querySelector(".sugg"));
-  }},
+  // Kortet "I dag" finns i plan.client.js
   kpis: { title: "Nyckeltal", tabs: ["oversikt"], bare: true, render(b, c){
     const canCmp = S.loadedDays >= c.days*2, weeksIn = c.days/7;
     const kp = [
       ["Pass", c.cur.length, c.prev.length, v => num(v)],
       ["Träningstid", sum(c.cur, x => x.dur), sum(c.prev, x => x.dur), v => hm(v)],
-      ["TRIMP", sum(c.cur, x => x.zp), sum(c.prev, x => x.zp), v => num(v)],
+      ["Belastning (TRIMP)", sum(c.cur, x => x.zp), sum(c.prev, x => x.zp), v => num(v)],
       ["Intensitetsminuter / vecka", sum(c.cur, x => x.im)/weeksIn, sum(c.prev, x => x.im)/weeksIn, v => num(v)],
     ];
     b.innerHTML = '<div class="kpis">' + kp.map(k => {
@@ -127,7 +114,7 @@ const CARDS = {
     const X = r => r.date;
     multiLine(q('[data-k="ch-form"]'), [{ color:"var(--accent)", pts: rows.map(r => ({x: X(r), y: r.ctl})), gap: 2*DAY }, { color:"var(--z4)", pts: rows.map(r => ({x: X(r), y: r.atl})), gap: 2*DAY }], { fmt: v => num(v), onPick: x => {
       const r = L.byKey[dayKey(x)]; if(!r) return;
-      q('[data-k="ro-form"]').innerHTML = '<b>' + esc(dateTxt(x)) + '</b> · TRIMP ' + num(r.load) + ' · kronisk ' + num(r.ctl) + ' · akut ' + num(r.atl) + (r.formPct != null ? ' · form ' + num(r.formPct) + ' %' : '');
+      q('[data-k="ro-form"]').innerHTML = '<b>' + esc(dateTxt(x)) + '</b> · belastning ' + num(r.load) + ' · kronisk ' + num(r.ctl) + ' · akut ' + num(r.atl) + (r.formPct != null ? ' · form ' + num(r.formPct) + ' %' : '');
     }});
     multiLine(q('[data-k="ch-formp"]'), [{ color:"var(--ink)", pts: rows.filter(r => r.formPct != null).map(r => ({x: X(r), y: r.formPct})), gap: 2*DAY }], { h: 110, zero: true, fmt: v => num(v) + "%", bandSeries: { lo: rows.map(r => ({x: X(r), y: -30})), hi: rows.map(r => ({x: X(r), y: -10})) } });
     q('[data-k="ro-form"]').textContent = "Grönt fält: −30 till −10 %, normal träningsbelastning.";
@@ -144,7 +131,7 @@ const CARDS = {
     const ro = b.querySelector(".readout");
     barChart(b.querySelector(".chart"), weeks.map(d => "v"+isoWeek(d)), used.map(g => ({ color: gColor(g[0]), vals: per[g[0]] })), {
       fmt: v => num(v/60, 1) + " h", minMax: 180,
-      onPick: i => { const ss = wk[i]; ro.innerHTML = '<b>Vecka ' + isoWeek(weeks[i]) + '</b> · ' + ss.length + ' pass · ' + hm(sum(ss, x => x.dur)) + ' · TRIMP ' + num(sum(ss, x => x.zp)) +
+      onPick: i => { const ss = wk[i]; ro.innerHTML = '<b>Vecka ' + isoWeek(weeks[i]) + '</b> · ' + ss.length + ' pass · ' + hm(sum(ss, x => x.dur)) + ' · belastning ' + num(sum(ss, x => x.zp)) +
         (ss.length ? '<div class="btnrow" style="margin-top:8px">' + ss.slice().reverse().map(x => '<button class="btn ghost small" data-open="' + x.id + '">' + esc(dateTxt(x.date).split(" ")[0]) + ' ' + esc(x.name) + '</button>').join("") + '</div>' : ""); }
     });
   }},
@@ -154,7 +141,7 @@ const CARDS = {
     if(!ws.some(w => w.total)){ b.innerHTML = note("Ingen belastning i perioden."); return; }
     b.innerHTML = '<div class="chart"></div><div class="readout"></div><div class="sub" style="margin-top:6px">Monotoni är dagligt snitt delat med standardavvikelsen över veckan, strain är veckans TRIMP gånger monotoni (Foster 1998). Foster såg sjukdomsfall sammanfalla med toppar i strain. Monotoni över 2 brukar nämnas som varningsnivå.</div>';
     const ro = b.querySelector(".readout");
-    barChart(b.querySelector(".chart"), ws.map(w => "v"+isoWeek(w.week)), [{ color:"var(--str)", vals: ws.map(w => w.strain || 0) }], { h: 150, fmt: v => num(v), onPick: i => { const w = ws[i]; ro.innerHTML = '<b>Vecka ' + isoWeek(w.week) + '</b> · TRIMP ' + num(w.total) + ' · monotoni ' + (w.mono != null ? num(w.mono, 2) : "–") + ' · strain ' + num(w.strain); } });
+    barChart(b.querySelector(".chart"), ws.map(w => "v"+isoWeek(w.week)), [{ color:"var(--str)", vals: ws.map(w => w.strain || 0) }], { h: 150, fmt: v => num(v), onPick: i => { const w = ws[i]; ro.innerHTML = '<b>Vecka ' + isoWeek(w.week) + '</b> · belastning ' + num(w.total) + ' · monotoni ' + (w.mono != null ? num(w.mono, 2) : "–") + ' · strain ' + num(w.strain); } });
     const last = ws[ws.length-1];
     ro.innerHTML = 'Den här veckan: monotoni ' + (last.mono != null ? num(last.mono, 2) : "–") + ', strain ' + num(last.strain) + '.';
   }},
@@ -185,12 +172,12 @@ const CARDS = {
   }},
 
   // ----- Trender -----
-  trimpw: { title: "TRIMP per vecka", tabs: ["trender"], render(b, c){
+  trimpw: { title: "Belastning per vecka", tabs: ["trender"], render(b, c){
     const nW = Math.max(4, Math.round(c.days/7));
     const { weeks, idx } = weekIndex(c.sel, nW);
     const v = new Array(nW).fill(0); c.sel.forEach(x => { const i = idx(x); if(i >= 0 && i < nW) v[i] += x.zp || 0; });
     b.innerHTML = '<div class="chart"></div><div class="readout"></div>';
-    barChart(b.querySelector(".chart"), weeks.map(d => "v"+isoWeek(d)), [{ color:"var(--accent)", vals: v }], { h: 150, onPick: i => { b.querySelector(".readout").innerHTML = '<b>Vecka ' + isoWeek(weeks[i]) + '</b> · TRIMP ' + num(v[i]); } });
+    barChart(b.querySelector(".chart"), weeks.map(d => "v"+isoWeek(d)), [{ color:"var(--accent)", vals: v }], { h: 150, onPick: i => { b.querySelector(".readout").innerHTML = '<b>Vecka ' + isoWeek(weeks[i]) + '</b> · belastning ' + num(v[i]); } });
     b.querySelector(".readout").textContent = "Snitt " + num(mean(v)) + " per vecka.";
   }},
   hr: { title: "Snittpuls per pass", tabs: ["trender"], render(b, c){
@@ -342,7 +329,7 @@ function renderPass(){
   const list = passList();
   const fields = fieldDefs();
   const avgHr = mean(list.map(x => x.avgHR));
-  $("#psum").innerHTML = list.length ? '<b>' + list.length + ' pass</b> · ' + hm(sum(list, x => x.dur)) + ' · TRIMP ' + num(sum(list, x => x.zp)) + (avgHr ? ' · snittpuls ' + num(avgHr) : '') + (view && view.conds.length ? '<div class="sub">' + esc(view.conds.map(c => condText(c, fields)).join(" och ")) + '</div>' : '') : "";
+  $("#psum").innerHTML = list.length ? '<b>' + list.length + ' pass</b> · ' + hm(sum(list, x => x.dur)) + ' · belastning ' + num(sum(list, x => x.zp)) + (avgHr ? ' · snittpuls ' + num(avgHr) : '') + (view && view.conds.length ? '<div class="sub">' + esc(view.conds.map(c => condText(c, fields)).join(" och ")) + '</div>' : '') : "";
   const vc = $("#vcharts"); vc.innerHTML = "";
   if(view && (view.charts || []).length && list.length >= 2){
     view.charts.forEach(mid => {
@@ -358,7 +345,7 @@ function renderPass(){
   let html = "";
   if(S.sort === "date" || S.sort === "date_asc"){
     let lastW = null, rows = [];
-    const flush = () => { if(!rows.length) return; const ss = rows; html += '<div class="wk"><span>Vecka ' + isoWeek(ss[0].date) + (ss[0].date.getFullYear() !== new Date().getFullYear() ? ", " + ss[0].date.getFullYear() : "") + '</span><span>' + ss.length + ' pass · ' + hm(sum(ss, x => x.dur)) + ' · ' + num(sum(ss, x => x.zp)) + ' TRIMP</span></div>' + ss.map(rowHtml).join(""); rows = []; };
+    const flush = () => { if(!rows.length) return; const ss = rows; html += '<div class="wk"><span>Vecka ' + isoWeek(ss[0].date) + (ss[0].date.getFullYear() !== new Date().getFullYear() ? ", " + ss[0].date.getFullYear() : "") + '</span><span>' + ss.length + ' pass · ' + hm(sum(ss, x => x.dur)) + ' · ' + num(sum(ss, x => x.zp)) + ' belastning</span></div>' + ss.map(rowHtml).join(""); rows = []; };
     const ordered = S.sort === "date_asc" ? list.slice().reverse() : list;
     ordered.slice(0, 500).forEach(x => { const w = +monday(x.date); if(w !== lastW){ flush(); lastW = w; } rows.push(x); }); flush();
   } else {
@@ -409,7 +396,7 @@ function openSession(id){
   const rec = recoveryHours(x);
   let html = '<div class="sub">' + esc(typeLabel(x.type)) + ' · ' + esc(dateTxt(x.date, true)) + ' kl ' + pad(x.date.getHours()) + ':' + pad(x.date.getMinutes()) + '</div>';
   html += '<div class="metrics" id="mgrid">' + metricGrid(x) + '</div><div class="btnrow"><button class="btn ghost small" id="prof-btn">Välj mått för ' + esc(GROUP_NAME[x.grp]) + '</button></div><div id="prof-edit"></div>';
-  if(rec) html += '<div class="sub">Vilotid cirka ' + rec.h + ' h (' + esc(rec.method) + '): passets TRIMP är ' + num(rec.r*100) + ' % av din median för gruppen ' + esc(GROUP_NAME[x.grp]) + '.</div>';
+  if(x.zp != null) html += '<div class="sub">Belastning (TRIMP) ' + num(x.zp) + ': varje minut i pulszon 1–5 räknas som 1–5 poäng, så 10 minuter i zon 4 ger 40.' + (rec ? ' Passet är ' + num(rec.r*100) + ' % av ditt vanliga pass i gruppen ' + esc(GROUP_NAME[x.grp]) + ', vilket ger cirka ' + rec.h + ' h vilotid (' + esc(rec.method) + ').' : '') + '</div>';
 
   html += '<section class="card" id="logcard"></section>';
 
