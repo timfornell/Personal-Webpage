@@ -1,0 +1,12 @@
+name = "personal-webpage"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Behåll variabler som lagts in i Cloudflares panel vid varje deploy.
+keep_vars = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true

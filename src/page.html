@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Träning">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f5f4">
+<link rel="manifest" href="/manifest.json">
+<title>Träningsdata</title>
+<style>
+/* Layout: one narrow column for the phone, sticky header with tabs, sheets for detail views */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --sunk:#e9eeec; --ink:#17211e; --muted:#5b6a65; --line:#dbe2df;
+  --accent:#1f6f5c; --accent-ink:#ffffff; --good:#2f7d4f; --warn:#a15c07; --bad:#b42318;
+  --run:#1f6f5c; --str:#7a4fb0; --hiit:#c2410c; --cyc:#1d64b0; --oth:#6b7a75;
+  --f-display: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+  --f-body: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --f-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0f1514; --surface:#171f1d; --sunk:#1e2826; --ink:#e4ebe8; --muted:#94a39e; --line:#2a3633;
+    --accent:#5cc3a4; --accent-ink:#0b1412; --good:#6cc88f; --warn:#e3a547; --bad:#f2786b;
+    --run:#5cc3a4; --str:#b394e6; --hiit:#f0915c; --cyc:#6ea8ea; --oth:#93a29d; color-scheme: dark; }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg); color:var(--ink); font:15px/1.45 var(--f-body); -webkit-text-size-adjust:100%;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+body::before{content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top,0px); background:var(--bg); z-index:20}
+.wrap{max-width:720px; margin:0 auto; padding-left:max(16px,env(safe-area-inset-left,0px)); padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky; top:env(safe-area-inset-top,0px); z-index:10; background:var(--bg); border-bottom:1px solid var(--line)}
+.top{display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding-block:14px 8px}
+h1{font:700 22px/1.1 var(--f-display); margin:0; letter-spacing:-.01em}
+.who{font-size:12px; color:var(--muted); text-align:right; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; vertical-align:1px}
+.dot.ok{background:var(--good)} .dot.err{background:var(--bad)}
+.tabs{display:flex; gap:4px; padding-bottom:8px}
+.tab{flex:1; border:0; background:transparent; color:var(--muted); font:600 14px var(--f-body); padding:8px; border-radius:8px; cursor:pointer}
+.tab[aria-selected="true"]{background:var(--sunk); color:var(--ink)}
+button:focus-visible, select:focus-visible, input:focus-visible, .row:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+main{padding-block:14px 40px; display:flex; flex-direction:column; gap:14px}
+.controls{display:flex; flex-wrap:wrap; gap:8px}
+.controls input{flex:1 1 180px; min-width:0}
+input,select{font:15px var(--f-body); color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:9px 11px}
+.chips{display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none}
+.chip{flex:none; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:999px; padding:5px 11px; font:500 13px var(--f-body); cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+.chip .n{color:var(--muted); margin-left:4px; font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"] .n{color:inherit; opacity:.7}
+.stats{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.stat{background:var(--surface); padding:10px 12px}
+.stat b{display:block; font:700 20px/1.2 var(--f-display); font-variant-numeric:tabular-nums}
+.stat span{font-size:12px; color:var(--muted)}
+.weeks{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px}
+.weeks h2,.section h2{font:600 13px var(--f-body); color:var(--muted); margin:0 0 8px; letter-spacing:.02em}
+.bars{display:grid; grid-template-columns:repeat(12,1fr); gap:4px; align-items:end; height:64px}
+.bar{background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; opacity:.85}
+.bar.now{opacity:1}
+.barlabels{display:grid; grid-template-columns:repeat(12,1fr); gap:4px; font-size:10px; color:var(--muted); text-align:center; margin-top:4px; font-variant-numeric:tabular-nums}
+.list{display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.day{font:600 12px var(--f-body); color:var(--muted); padding:10px 12px 4px; background:var(--sunk); border-top:1px solid var(--line)}
+.day:first-child{border-top:0}
+.row{display:grid; grid-template-columns:4px 1fr auto; gap:10px; align-items:center; padding:10px 12px; border-top:1px solid var(--line); cursor:pointer; background:var(--surface); text-align:left; width:100%; border-left:0; border-right:0; border-bottom:0; color:inherit; font:inherit}
+.day + .row{border-top:0}
+.stripe{width:4px; align-self:stretch; border-radius:2px; background:var(--oth)}
+.row .name{font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.row .meta{font-size:12px; color:var(--muted)}
+.row .nums{text-align:right; font-variant-numeric:tabular-nums; font-size:13px}
+.row .nums small{display:block; color:var(--muted); font-size:12px}
+.empty,.note{color:var(--muted); font-size:14px; padding:16px; text-align:center}
+.banner{border:1px solid var(--bad); color:var(--bad); background:var(--surface); border-radius:12px; padding:12px; font-size:14px}
+.btn{border:0; background:var(--accent); color:var(--accent-ink); font:600 15px var(--f-body); border-radius:10px; padding:10px 14px; cursor:pointer}
+.btn.ghost{background:var(--sunk); color:var(--ink)}
+.btn:disabled{opacity:.5}
+.btnrow{display:flex; flex-wrap:wrap; gap:8px}
+.section{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px}
+.probe{display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.probe details{border-top:1px solid var(--line)} .probe details:first-child{border-top:0}
+.probe summary{list-style:none; display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center; padding:10px 12px; cursor:pointer}
+.probe summary::-webkit-details-marker{display:none}
+.pill{font:600 11px var(--f-mono); padding:2px 6px; border-radius:6px; background:var(--sunk); color:var(--muted)}
+.pill.ok{color:var(--good)} .pill.err{color:var(--bad)}
+.probe .lbl{min-width:0} .probe .lbl small{display:block; color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.probe .cnt{font-size:12px; color:var(--muted); text-align:right; font-variant-numeric:tabular-nums}
+.fields{padding:0 12px 12px; display:flex; flex-direction:column; gap:8px}
+.ftable{overflow-x:auto; border:1px solid var(--line); border-radius:8px; max-height:340px; overflow-y:auto}
+table{border-collapse:collapse; width:100%; font-size:12px}
+td,th{padding:5px 8px; border-top:1px solid var(--line); text-align:left; vertical-align:top}
+tr:first-child td{border-top:0}
+td.k{font-family:var(--f-mono); word-break:break-all} td.v{white-space:nowrap; color:var(--muted); font-variant-numeric:tabular-nums}
+td.empty-field{color:var(--muted); opacity:.6}
+pre{margin:0; font:12px/1.4 var(--f-mono); background:var(--sunk); border-radius:8px; padding:10px; overflow:auto; max-height:420px; white-space:pre}
+.sheet{position:fixed; inset:0; z-index:30; background:var(--bg); overflow-y:auto; -webkit-overflow-scrolling:touch;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+.sheet .bar-top{position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line); z-index:2}
+.sheet .bar-top .wrap{display:flex; align-items:center; gap:10px; padding-block:10px}
+.back{border:0; background:var(--sunk); color:var(--ink); border-radius:8px; padding:7px 12px; font:600 14px var(--f-body); cursor:pointer}
+.sheet h2.title{font:700 20px/1.2 var(--f-display); margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.metrics{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.metric{background:var(--surface); padding:10px 12px}
+.metric b{display:block; font:700 18px/1.2 var(--f-display); font-variant-numeric:tabular-nums}
+.metric span{font-size:12px; color:var(--muted)}
+.spin{display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:sp 0.8s linear infinite; vertical-align:-2px; margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){ .spin{animation:none} }
+.toast{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:8px 14px; border-radius:999px; font-size:14px; z-index:40}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="top">
+      <h1>Träningsdata</h1>
+      <div class="who" id="who"><span class="dot"></span>Ansluter …</div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-pass" aria-selected="true">Pass</button>
+      <button class="tab" role="tab" id="tab-karta" aria-selected="false">Datakarta</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap" id="view-pass">
+  <div class="controls">
+    <input id="q" type="search" placeholder="Sök pass, t.ex. löp eller metcon" autocomplete="off">
+    <select id="days" aria-label="Period">
+      <option value="30">30 dagar</option>
+      <option value="90" selected>90 dagar</option>
+      <option value="365">1 år</option>
+      <option value="1095">3 år</option>
+    </select>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="stats" id="stats"></div>
+  <div class="weeks" id="weeks"></div>
+  <div id="err-pass"></div>
+  <div class="list" id="list"><div class="empty"><span class="spin"></span>Hämtar pass från Garmin …</div></div>
+</main>
+
+<main class="wrap" id="view-karta" hidden>
+  <div class="section">
+    <h2>VAD KAN GARMIN GE OSS?</h2>
+    <p style="margin:0 0 10px">Datakartan anropar varje del av Garmins API en gång och listar vilka fält som kommer tillbaka och hur ofta de är ifyllda. Det tar ungefär en halv minut.</p>
+    <div class="btnrow">
+      <button class="btn" id="run-probe">Kör datakartan</button>
+      <button class="btn ghost" id="copy-report" disabled>Kopiera rapport</button>
+    </div>
+    <p class="meta" style="font-size:12px;color:var(--muted);margin:8px 0 0">Rapporten innehåller bara fältnamn och typer, inga värden. Klistra in den i chatten med Claude.</p>
+  </div>
+  <div id="probe-summary"></div>
+  <div class="probe" id="probe" hidden></div>
+</main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="bar-top"><div class="wrap"><button class="back" id="back">Tillbaka</button><h2 class="title" id="sheet-title"></h2></div></div>
+  <div class="wrap" style="padding-block:14px 40px; display:flex; flex-direction:column; gap:14px" id="sheet-body"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const TYPES = {
+  running:["Löpning","run"], trail_running:["Terränglöpning","run"], treadmill_running:["Löpband","run"], track_running:["Bana","run"], indoor_running:["Löpning inne","run"],
+  strength_training:["Styrka","str"], hiit:["HIIT","hiit"], indoor_cardio:["Kondition inne","hiit"], fitness_equipment:["Gym","str"], indoor_rowing:["Rodd","hiit"],
+  cycling:["Cykling","cyc"], indoor_cycling:["Cykel inne","cyc"], road_biking:["Landsväg","cyc"], mountain_biking:["MTB","cyc"], virtual_ride:["Virtuell cykel","cyc"],
+  walking:["Promenad","oth"], hiking:["Vandring","oth"], yoga:["Yoga","oth"], pilates:["Pilates","oth"], lap_swimming:["Simning","cyc"], open_water_swimming:["Öppet vatten","cyc"],
+  mobility:["Rörlighet","oth"], breathwork:["Andning","oth"], other:["Övrigt","oth"]
+};
+const typeKey = a => (a.activityType && a.activityType.typeKey) || "other";
+const typeLabel = k => (TYPES[k] ? TYPES[k][0] : k.replace(/_/g," "));
+const typeColor = k => "var(--" + (TYPES[k] ? TYPES[k][1] : "oth") + ")";
+const isRun = k => TYPES[k] && TYPES[k][1] === "run";
+
+function dur(s){ if(!s && s!==0) return "–"; s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return h ? h+":"+String(m).padStart(2,"0")+":"+String(x).padStart(2,"0") : m+":"+String(x).padStart(2,"0"); }
+function hm(s){ s=Math.round(s||0); const h=Math.floor(s/3600), m=Math.round(s%3600/60); return h ? h+" h "+m+" min" : m+" min"; }
+function km(m){ return m ? (m/1000).toLocaleString("sv-SE",{maximumFractionDigits:2}) + " km" : "–"; }
+function pace(mps){ if(!mps) return "–"; const s=1000/mps; return Math.floor(s/60)+":"+String(Math.round(s%60)).padStart(2,"0")+" /km"; }
+function num(v,d){ return v==null ? "–" : Number(v).toLocaleString("sv-SE",{maximumFractionDigits:d==null?1:d}); }
+function localDate(a){ return (a.startTimeLocal || a.startTimeGMT || "").replace(" ","T"); }
+function dayLabel(iso){ const d=new Date(iso); if(isNaN(d)) return iso.slice(0,10); return d.toLocaleDateString("sv-SE",{weekday:"long", day:"numeric", month:"long", year: d.getFullYear()!==new Date().getFullYear() ? "numeric" : undefined}); }
+function timeLabel(iso){ return iso.slice(11,16); }
+function toast(t){ const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),1800); }
+
+async function api(path){
+  const r = await fetch(path, {headers:{Accept:"application/json"}});
+  let j=null; try{ j=await r.json(); }catch(e){}
+  if(!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
+  return j;
+}
+
+// ---------- Tabs ----------
+function showTab(name){
+  $("#tab-pass").setAttribute("aria-selected", name==="pass");
+  $("#tab-karta").setAttribute("aria-selected", name==="karta");
+  $("#view-pass").hidden = name!=="pass";
+  $("#view-karta").hidden = name!=="karta";
+  try{ localStorage.setItem("tab", name); }catch(e){}
+}
+$("#tab-pass").onclick=()=>showTab("pass");
+$("#tab-karta").onclick=()=>showTab("karta");
+
+// ---------- Status ----------
+api("/api/status").then(s=>{
+  $("#who").innerHTML = '<span class="dot ok"></span>Garmin ansluten · ' + esc(s.email || "");
+}).catch(e=>{
+  $("#who").innerHTML = '<span class="dot err"></span>Garmin ej ansluten';
+  $("#err-pass").innerHTML = '<div class="banner">' + esc(e.message) + '</div>';
+});
+
+// ---------- Pass ----------
+const P = { all:[], type:null, q:"", days:90 };
+async function loadActivities(){
+  $("#list").innerHTML = '<div class="empty"><span class="spin"></span>Hämtar pass från Garmin …</div>';
+  try{
+    const j = await api("/api/activities?days=" + P.days);
+    P.all = (j.activities || []).slice().sort((a,b)=> localDate(b).localeCompare(localDate(a)));
+    $("#err-pass").innerHTML = "";
+    renderPass();
+  }catch(e){
+    $("#list").innerHTML = '<div class="empty">Inga pass kunde hämtas.</div>';
+    $("#err-pass").innerHTML = '<div class="banner">' + esc(e.message) + '</div>';
+  }
+}
+function filtered(){
+  const q = P.q.trim().toLowerCase();
+  return P.all.filter(a=>{
+    const k = typeKey(a);
+    if(P.type && k!==P.type) return false;
+    if(!q) return true;
+    return ((a.activityName||"") + " " + typeLabel(k) + " " + k + " " + (a.description||"")).toLowerCase().includes(q);
+  });
+}
+function renderPass(){
+  // chips
+  const counts = {};
+  P.all.forEach(a=>{ const k=typeKey(a); counts[k]=(counts[k]||0)+1; });
+  const keys = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  $("#chips").innerHTML = '<button class="chip" data-t="" aria-pressed="' + (!P.type) + '">Alla<span class="n">' + P.all.length + '</span></button>' +
+    keys.map(k=>'<button class="chip" data-t="' + esc(k) + '" aria-pressed="' + (P.type===k) + '"><span class="dot" style="background:' + typeColor(k) + '"></span>' + esc(typeLabel(k)) + '<span class="n">' + counts[k] + '</span></button>').join("");
+  const list = filtered();
+  // stats
+  const tot = list.reduce((s,a)=>s+(a.duration||0),0);
+  const dist = list.reduce((s,a)=>s+(a.distance||0),0);
+  $("#stats").innerHTML =
+    '<div class="stat"><b>' + list.length + '</b><span>pass</span></div>' +
+    '<div class="stat"><b>' + hm(tot) + '</b><span>total tid</span></div>' +
+    '<div class="stat"><b>' + (dist ? km(dist) : "–") + '</b><span>distans</span></div>';
+  // weekly minutes, last 12 weeks
+  const now = new Date(); const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay()+6)%7));
+  const weeks = Array.from({length:12},(_,i)=>{ const s=new Date(monday); s.setDate(s.getDate()-7*(11-i)); return {start:s, min:0}; });
+  list.forEach(a=>{ const d=new Date(localDate(a)); for(let i=11;i>=0;i--){ if(d>=weeks[i].start){ if(i===11 || d < weeks[i+1].start) weeks[i].min += (a.duration||0)/60; break; } } });
+  const max = Math.max(60, ...weeks.map(w=>w.min));
+  $("#weeks").innerHTML = '<h2>MINUTER PER VECKA</h2><div class="bars">' +
+    weeks.map((w,i)=>'<div class="bar' + (i===11?" now":"") + '" style="height:' + Math.round(w.min/max*100) + '%" title="' + Math.round(w.min) + ' min"></div>').join("") +
+    '</div><div class="barlabels">' + weeks.map(w=>'<span>v' + isoWeek(w.start) + '</span>').join("") + '</div>';
+  // list
+  if(!list.length){ $("#list").innerHTML = '<div class="empty">Inga pass matchar.</div>'; return; }
+  let html="", lastDay="";
+  list.slice(0,400).forEach((a,idx)=>{
+    const iso = localDate(a), day = iso.slice(0,10), k=typeKey(a);
+    if(day!==lastDay){ html += '<div class="day">' + esc(dayLabel(iso)) + '</div>'; lastDay=day; }
+    const right = a.distance ? km(a.distance) : dur(a.duration);
+    const sub = a.averageHR ? Math.round(a.averageHR) + " bpm" : (a.distance ? dur(a.duration) : "");
+    html += '<button class="row" data-i="' + P.all.indexOf(a) + '"><span class="stripe" style="background:' + typeColor(k) + '"></span>' +
+      '<span style="min-width:0"><span class="name">' + esc(a.activityName || typeLabel(k)) + '</span><span class="meta">' + esc(typeLabel(k)) + ' · ' + esc(timeLabel(iso)) + (a.distance ? ' · ' + esc(dur(a.duration)) : "") + '</span></span>' +
+      '<span class="nums">' + esc(right) + '<small>' + esc(sub) + '</small></span></button>';
+  });
+  if(list.length>400) html += '<div class="note">Visar de 400 senaste av ' + list.length + '. Sök eller filtrera för att hitta äldre pass.</div>';
+  $("#list").innerHTML = html;
+}
+function isoWeek(d){ const t=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day=(t.getUTCDay()+6)%7; t.setUTCDate(t.getUTCDate()-day+3); const f=new Date(Date.UTC(t.getUTCFullYear(),0,4)); return 1+Math.round(((t-f)/864e5-3+((f.getUTCDay()+6)%7))/7); }
+
+$("#chips").onclick = e=>{ const b=e.target.closest(".chip"); if(!b) return; P.type = b.dataset.t || null; renderPass(); };
+$("#q").oninput = e=>{ P.q = e.target.value; renderPass(); };
+$("#days").onchange = e=>{ P.days = parseInt(e.target.value,10); loadActivities(); };
+$("#list").onclick = e=>{ const r=e.target.closest(".row"); if(r) openActivity(P.all[+r.dataset.i]); };
+
+// ---------- Passdetalj ----------
+function openSheet(title){ $("#sheet-title").textContent=title; $("#sheet").hidden=false; document.body.style.overflow="hidden"; $("#sheet").scrollTop=0; }
+function closeSheet(){ $("#sheet").hidden=true; document.body.style.overflow=""; }
+$("#back").onclick = closeSheet;
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("#sheet").hidden) closeSheet(); });
+
+function metric(label, value){ return value==="–" || value==null ? "" : '<div class="metric"><b>' + esc(value) + '</b><span>' + esc(label) + '</span></div>'; }
+function scalarRows(obj, prefix, out){
+  out = out || [];
+  if(obj && typeof obj==="object" && !Array.isArray(obj)){
+    Object.keys(obj).forEach(k=>{ const v=obj[k]; const p = prefix ? prefix+"."+k : k;
+      if(v && typeof v==="object") { if(!Array.isArray(v)) scalarRows(v,p,out); else out.push([p, "[" + v.length + " poster]"]); }
+      else out.push([p, v]); });
+  }
+  return out;
+}
+async function openActivity(a){
+  const k = typeKey(a), iso = localDate(a);
+  openSheet(a.activityName || typeLabel(k));
+  const m = [
+    metric("Tid", dur(a.duration)), metric("Distans", a.distance ? km(a.distance) : "–"),
+    metric("Tempo", isRun(k) ? pace(a.averageSpeed) : "–"),
+    metric("Snittpuls", a.averageHR ? Math.round(a.averageHR) + " bpm" : "–"), metric("Maxpuls", a.maxHR ? Math.round(a.maxHR) + " bpm" : "–"),
+    metric("Kalorier", a.calories ? Math.round(a.calories) + " kcal" : "–"),
+    metric("Aerob effekt (TE)", a.aerobicTrainingEffect != null ? num(a.aerobicTrainingEffect) : "–"),
+    metric("Anaerob effekt (TE)", a.anaerobicTrainingEffect != null ? num(a.anaerobicTrainingEffect) : "–"),
+    metric("Träningsbelastning", a.activityTrainingLoad != null ? num(a.activityTrainingLoad,0) : "–"),
+    metric("Höjdmeter", a.elevationGain ? Math.round(a.elevationGain) + " m" : "–"),
+    metric("Set", a.totalSets != null ? a.totalSets : (a.activeSets != null ? a.activeSets : "–")),
+    metric("Reps", a.totalReps != null ? a.totalReps : "–"),
+  ].join("");
+  $("#sheet-body").innerHTML =
+    '<div class="meta" style="color:var(--muted)">' + esc(typeLabel(k)) + ' · ' + esc(dayLabel(iso)) + ' ' + esc(timeLabel(iso)) + '</div>' +
+    '<div class="metrics">' + m + '</div>' +
+    '<div class="section" id="det"><h2>ALLA FÄLT FRÅN GARMIN</h2><div class="note"><span class="spin"></span>Hämtar detaljer …</div></div>';
+  try{
+    const j = await api("/api/activity/" + a.activityId);
+    const rows = scalarRows(j.details && (j.details.summaryDTO || j.details), "");
+    const filled = rows.filter(r=>r[1]!==null && r[1]!=="");
+    let html = '<h2>ALLA FÄLT FRÅN GARMIN (' + filled.length + ' IFYLLDA)</h2>';
+    html += filled.length ? '<div class="ftable"><table>' + filled.map(r=>'<tr><td class="k">' + esc(r[0]) + '</td><td class="v">' + esc(typeof r[1]==="number" ? num(r[1],2) : r[1]) + '</td></tr>').join("") + '</table></div>' : '<div class="note">Inga detaljfält kom tillbaka (HTTP ' + esc(j.detailsStatus) + ').</div>';
+    html += '<h2 style="margin-top:14px">WORKOUTS (HTTP ' + esc(j.workoutsStatus) + ')</h2>';
+    html += j.workouts ? '<pre>' + esc(JSON.stringify(j.workouts, null, 1)) + '</pre>' : '<div class="note">Inget innehåll.</div>';
+    html += '<div class="btnrow" style="margin-top:12px"><button class="btn ghost" id="rawbtn">Visa rådata för passet</button></div><div id="rawbox"></div>';
+    $("#det").innerHTML = html;
+    $("#rawbtn").onclick = ()=>{ $("#rawbox").innerHTML = '<pre style="margin-top:10px">' + esc(JSON.stringify({listPost:a, detaljer:j.details}, null, 1)) + '</pre>'; $("#rawbtn").remove(); };
+  }catch(e){
+    $("#det").innerHTML = '<div class="banner">' + esc(e.message) + '</div>';
+  }
+}
+
+// ---------- Datakarta ----------
+let PROBE = null;
+$("#run-probe").onclick = async ()=>{
+  const b = $("#run-probe"); b.disabled = true; b.innerHTML = '<span class="spin"></span>Kör …';
+  $("#probe-summary").innerHTML = "";
+  try{
+    PROBE = await api("/api/probe");
+    renderProbe();
+    $("#copy-report").disabled = false;
+  }catch(e){
+    $("#probe-summary").innerHTML = '<div class="banner">' + esc(e.message) + '</div>';
+  }
+  b.disabled = false; b.textContent = "Kör igen";
+};
+function renderProbe(){
+  const ok = PROBE.results.filter(r=>r.status===200).length;
+  const types = Object.entries(PROBE.types).sort((a,b)=>b[1]-a[1]);
+  $("#probe-summary").innerHTML = '<div class="stats"><div class="stat"><b>' + ok + '/' + PROBE.results.length + '</b><span>delar svarade</span></div><div class="stat"><b>' + PROBE.activityCount + '</b><span>pass senaste 90 d</span></div><div class="stat"><b>' + types.length + '</b><span>aktivitetstyper</span></div></div>' +
+    (types.length ? '<div class="section" style="margin-top:14px"><h2>AKTIVITETSTYPER</h2>' + types.map(t=>'<span class="chip" style="display:inline-block;margin:0 6px 6px 0"><span class="dot" style="background:' + typeColor(t[0]) + '"></span>' + esc(typeLabel(t[0])) + ' <span class="n">' + t[1] + '</span></span>').join("") + '</div>' : "");
+  const el = $("#probe"); el.hidden = false;
+  el.innerHTML = PROBE.results.map((r,i)=>{
+    const fields = Object.entries(r.fields || {});
+    const filled = fields.filter(f=>f[1].filled>0).length;
+    const ok = r.status===200;
+    return '<details data-i="' + i + '"><summary><span class="pill ' + (ok?"ok":"err") + '">' + r.status + '</span><span class="lbl">' + esc(r.label) + '<small>' + esc(r.path) + '</small></span><span class="cnt">' +
+      (ok ? (r.bytes && !fields.length ? Math.round(r.bytes/1024) + " kB" : r.records + " st<br>" + filled + "/" + fields.length + " fält") : "fel") + '</span></summary><div class="fields">' +
+      (r.error ? '<div class="banner">' + esc(r.error) + '</div>' : "") +
+      (fields.length ? '<div class="ftable"><table>' + fields.map(f=>'<tr><td class="k' + (f[1].filled? "" : " empty-field") + '">' + esc(f[0]) + '</td><td class="v">' + esc(f[1].types.join("/")) + '</td><td class="v">' + f[1].filled + '/' + f[1].seen + '</td></tr>').join("") + '</table></div>' : "") +
+      ((ok && fields.length) ? '<div class="btnrow"><button class="btn ghost raw">Visa rådata</button></div><div class="rawbox"></div>' : "") +
+      '</div></details>';
+  }).join("");
+}
+$("#probe").onclick = async e=>{
+  const b = e.target.closest(".raw"); if(!b) return;
+  const d = b.closest("details"); const r = PROBE.results[+d.dataset.i]; const box = d.querySelector(".rawbox");
+  b.disabled = true; box.innerHTML = '<div class="note"><span class="spin"></span>Hämtar …</div>';
+  try{
+    let path = "/api/raw?ep=" + encodeURIComponent(r.id);
+    if(r.raw) path = "/api/raw?id=" + r.raw.activityId + "&kind=" + r.raw.kind;
+    if(r.id==="aktiviteter") { box.innerHTML = '<pre>' + esc(JSON.stringify(P.all.slice(0,3), null, 1)) + '</pre><div class="note">De tre senaste passen från listan.</div>'; return; }
+    const j = await api(path);
+    box.innerHTML = '<pre>' + esc(JSON.stringify(j.data, null, 1)) + '</pre>';
+  }catch(err){ box.innerHTML = '<div class="banner">' + esc(err.message) + '</div>'; }
+};
+$("#copy-report").onclick = async ()=>{
+  const lines = ["DATAKARTA " + PROBE.generated.slice(0,10), "Pass senaste 90 d: " + PROBE.activityCount,
+    "Typer: " + Object.entries(PROBE.types).sort((a,b)=>b[1]-a[1]).map(t=>t[0]+" "+t[1]).join(", "), ""];
+  PROBE.results.forEach(r=>{
+    lines.push("== " + r.label + "  HTTP " + r.status + "  " + r.records + " poster  " + r.ms + " ms");
+    lines.push("   " + r.path);
+    if(r.error) lines.push("   FEL: " + String(r.error).replace(/\s+/g," ").slice(0,200));
+    Object.entries(r.fields||{}).forEach(f=>lines.push("   " + f[0] + ": " + f[1].types.join("/") + " (" + f[1].filled + "/" + f[1].seen + ")"));
+    lines.push("");
+  });
+  const text = lines.join("\n");
+  try{ await navigator.clipboard.writeText(text); toast("Rapporten är kopierad"); }
+  catch(e){ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); toast("Rapporten är kopierad"); }catch(e2){ toast("Kunde inte kopiera"); } ta.remove(); }
+};
+
+// ---------- Start ----------
+try{ if(localStorage.getItem("tab")==="karta") showTab("karta"); }catch(e){}
+loadActivities();
+</script>
+</body>
+</html>

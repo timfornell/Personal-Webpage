@@ -1,0 +1,9 @@
+{
+  "name": "personal-webpage",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/run.mjs",
+    "deploy": "npx wrangler deploy"
+  }
+}
