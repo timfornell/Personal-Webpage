@@ -215,6 +215,11 @@ td.empty-field{color:var(--muted); opacity:.6}
 
 <main class="wrap" id="view-data" hidden>
   <section class="card">
+    <h2>Lagring</h2>
+    <p style="margin:0 0 10px" id="store-note"></p>
+    <div class="btnrow"><button class="btn ghost" id="sync-now" hidden>Synka nu</button></div>
+  </section>
+  <section class="card">
     <h2>Historik</h2>
     <p style="margin:0 0 10px" id="hist-note"></p>
     <div class="btnrow"><button class="btn ghost" id="load3">Hämta 3 år</button></div>
@@ -312,15 +317,25 @@ async function api(path){
   return j;
 }
 
+const RECENT_DAYS = 62;
+function setData(j, days){
+  S.all = (j.activities||[]).map(norm).filter(x=>!isNaN(x.date)).sort((a,b)=>b.date-a.date);
+  S.loadedDays = days; S.source = j.source || "garmin";
+  $("#loading").hidden = true;
+  showTab(S.tab);
+}
+function bgNote(text){ $("#loaderr").innerHTML = text ? '<div class="note" style="padding:10px 0 0"><span class="spin"></span>' + esc(text) + '</div>' : ""; }
 async function load(days){
-  $("#loading").hidden=false; $("#loaderr").innerHTML="";
-  $("#loading").innerHTML = '<div class="note"><span class="spin"></span>Hämtar ' + (days>400 ? "tre års" : "ditt senaste års") + ' pass från Garmin …</div>';
+  $("#loaderr").innerHTML="";
+  if(!S.all.length){ $("#loading").hidden=false; $("#loading").innerHTML = '<div class="note"><span class="spin"></span>Hämtar dina pass …</div>'; }
   try{
-    const j = await api("/api/activities?days=" + days);
-    S.all = (j.activities||[]).map(norm).filter(x=>!isNaN(x.date)).sort((a,b)=>b.date-a.date);
-    S.loadedDays = days;
-    $("#loading").hidden = true;
-    showTab(S.tab);
+    // Med databas: visa de senaste två månaderna direkt, hämta resten från Garmin i bakgrunden
+    if(S.storage && S.storage.db && days > RECENT_DAYS && !S.all.length){
+      try{ setData(await api("/api/activities?days=" + RECENT_DAYS), RECENT_DAYS); }catch(e){}
+    }
+    if(S.all.length) bgNote("Hämtar " + (days>400 ? "tre års" : "ett års") + " historik från Garmin …");
+    setData(await api("/api/activities?days=" + days), days);
+    bgNote("");
   }catch(e){
     $("#loading").hidden = true;
     $("#loaderr").innerHTML = '<div class="banner" style="margin-top:14px">' + esc(e.message) + '</div>';
@@ -634,7 +649,24 @@ function renderData(){
   const oldest = S.all.length ? S.all[S.all.length-1].date : null;
   $("#hist-note").textContent = S.all.length ? S.all.length + " pass hämtade, från " + dateTxt(oldest, true) + ". Sidan hämtar ditt senaste år när den öppnas." : "Inga pass hämtade än.";
   $("#load3").hidden = S.loadedDays>=1095;
+  const st = S.storage || {};
+  if(!st.db){ $("#store-note").textContent = "Ingen databas är kopplad. Allt hämtas direkt från Garmin varje gång sidan öppnas."; $("#sync-now").hidden = true; }
+  else {
+    const when = st.lastSync ? new Date(st.lastSync).toLocaleString("sv-SE",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "aldrig";
+    $("#store-note").textContent = st.stored + " pass sparade i databasen, de senaste " + st.retainDays + " dagarna. Senast synkad " + when + ". Äldre pass hämtas från Garmin när de behövs och sparas inte.";
+    $("#sync-now").hidden = false;
+  }
 }
+$("#sync-now").onclick = async ()=>{
+  const b=$("#sync-now"); b.disabled=true; b.innerHTML='<span class="spin"></span>Synkar …';
+  try{
+    const r = await fetch("/api/sync", {method:"POST", headers:{Accept:"application/json"}});
+    const j = await r.json().catch(()=>null);
+    if(!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
+    S.storage = j.storage; toast(j.fetched + " pass hämtade från Garmin"); renderData();
+  }catch(e){ toast("Synken misslyckades: " + e.message); }
+  b.disabled=false; b.textContent="Synka nu";
+};
 $("#load3").onclick = ()=>load(1095);
 
 let PROBE = null;
@@ -673,9 +705,10 @@ $("#copy-report").onclick = async ()=>{
 };
 
 // ---------- Start ----------
-api("/api/status").then(s=>{ $("#who").innerHTML='<span class="dot ok"></span>' + esc(s.email || "Ansluten"); }).catch(e=>{ $("#who").innerHTML='<span class="dot err"></span>Garmin ej ansluten'; });
 document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===S.tab));
-load(365);
+api("/api/status").then(s=>{ S.storage=s.storage||{db:false}; $("#who").innerHTML='<span class="dot ok"></span>' + esc(s.email || "Ansluten"); })
+  .catch(e=>{ S.storage={db:false}; $("#who").innerHTML='<span class="dot err"></span>Garmin ej ansluten'; })
+  .finally(()=>load(365));
 </script>
 </body>
 </html>
