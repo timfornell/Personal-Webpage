@@ -22,11 +22,12 @@ import C_CHARTS from "./client/charts.client.js";
 import C_METRICS from "./client/metrics.client.js";
 import C_FIT from "./client/fit.client.js";
 import C_VIEWS from "./client/views.client.js";
+import C_PLAN from "./client/plan.client.js";
 import C_CUSTOM from "./client/custom.client.js";
 import C_EXTRA from "./client/extra.client.js";
 import C_MAIN from "./client/main.client.js";
 
-const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_VIEWS, C_CUSTOM, C_EXTRA, C_MAIN].join("\n"));
+const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_VIEWS, C_PLAN, C_CUSTOM, C_EXTRA, C_MAIN].join("\n"));
 
 // ---------- Cloudflare Access ----------
 let certCache = { keys: null, at: 0 };
