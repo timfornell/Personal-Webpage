@@ -164,24 +164,8 @@ function openLogEditor(lg, x){
   };
 }
 
-// ---------- Persist: förslag och import ----------
-async function loadSuggestions(R, el){
-  if(!el) return;
-  let h = '';
-  if(!S.storage.db || !S.storage.persist){ el.innerHTML = '<div class="sub">Importera Persist-arkivet under Data, så föreslår sidan konkreta pass på den här nivån.</div>'; return; }
-  el.innerHTML = '<div class="note"><span class="spin"></span></div>';
-  try{
-    const j = await api("/api/persist/suggest?pt=" + encodeURIComponent(R.L.pts.join(",")) + "&track=" + encodeURIComponent((CFG.persistTracks || []).join(",")) + "&limit=30");
-    const pool = (j.sessions || []).slice(0, 12);
-    if(!pool.length){ el.innerHTML = '<div class="sub">Inga Persist-pass av typen ' + esc(R.L.pts.join(", ")) + ' i de valda spåren.</div>'; return; }
-    const start = Math.floor(Date.now()/DAY) % pool.length;
-    const pick = [0, 1, 2].map(i => pool[(start + i) % pool.length]).filter((s, i, a) => a.indexOf(s) === i);
-    S.persistPick = pick;
-    h += '<div class="plist">' + pick.map((s, i) => '<button class="prow" data-persist="' + i + '"><b>' + esc(s.title || s.track) + '</b><span class="sub">' + esc(s.track) + (s.pt ? ' · ' + esc(s.pt) : '') + (s.dt ? ' · ' + esc(s.dt) : s.w ? ' · vecka ' + s.w + ' dag ' + s.dy : '') + (s.dur ? ' · ' + s.dur.join("–") + ' min' : '') + '</span></button>').join("") + '</div>';
-    h += '<div class="sub" style="margin-top:6px">Spår: ' + esc((CFG.persistTracks || []).length ? CFG.persistTracks.join(", ") : "alla") + '. Ändra under Data.</div>';
-    el.innerHTML = h;
-  }catch(e){ el.innerHTML = '<div class="sub">Kunde inte hämta förslag: ' + esc(e.message) + '</div>'; }
-}
+// ---------- Persist: visa pass och import ----------
+// Förslagen räknas fram i plan.client.js
 document.addEventListener("click", e => { const b = e.target.closest("[data-persist]"); if(b && S.persistPick) openPersist(S.persistPick[+b.dataset.persist]); });
 function openPersist(s){
   if(!s) return;
