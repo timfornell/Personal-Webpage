@@ -6,6 +6,9 @@
 //   POLICY_AUD      Application Audience (AUD) Tag från Cloudflare Access
 //   TEAM_DOMAIN     t.ex. https://ditt-team.cloudflareaccess.com
 //
+// Valfritt: en D1-databas med bindningen DB (se wrangler.toml) sparar de senaste
+// två månadernas pass och dina inställningar.
+//
 // Sidan släpper bara in förfrågningar med en giltig Cloudflare Access-token.
 // Saknas inställningarna svarar den 403, så inget visas innan inloggningen är på.
 
@@ -201,6 +204,78 @@ async function searchActivitiesRaw(env, days) {
   return { body: "[" + parts.join(",") + "]", status, error, count };
 }
 
+// ---------- Lagring (Cloudflare D1, bindningen DB) ----------
+// Garmin-pass sparas för de senaste RETAIN_DAYS dagarna. Äldre pass hämtas från Garmin vid behov och sparas inte.
+// Dina egna data (inställningar, och senare loggade pass) sparas utan tidsgräns.
+// Utan bindningen DB fungerar allt som tidigare, direkt mot Garmin.
+const RETAIN_DAYS = 62;             // 42 dagars kronisk belastning plus marginal
+const SYNC_EVERY_MS = 10 * 60e3;    // fråga Garmin om nya pass högst var tionde minut
+const FULL_SYNC_EVERY_MS = 24 * 3600e3; // läs om hela fönstret en gång per dygn, för ändrade och borttagna pass
+const ROWS_PER_INSERT = 20;         // D1 tillåter 100 parametrar per fråga, 5 per rad
+let schemaReady = false;
+
+async function ensureSchema(db) {
+  if (schemaReady) return;
+  await db.batch([
+    db.prepare("CREATE TABLE IF NOT EXISTS activities (id INTEGER PRIMARY KEY, start_local TEXT NOT NULL, type TEXT, raw TEXT NOT NULL, updated_at TEXT NOT NULL)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS activities_start ON activities (start_local)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)"),
+  ]);
+  schemaReady = true;
+}
+
+async function metaGet(db, key) { return await db.prepare("SELECT value FROM meta WHERE key = ?1").bind(key).first("value"); }
+function metaSet(db, key, value) { return db.prepare("INSERT INTO meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, String(value)); }
+
+// Hämtar nya pass från Garmin och sparar dem. Returnerar vad som gjordes.
+async function syncRecent(env, force) {
+  const db = env.DB;
+  await ensureSchema(db);
+  const now = Date.now();
+  const last = Number(await metaGet(db, "last_sync") || 0);
+  const lastFull = Number(await metaGet(db, "last_full_sync") || 0);
+  if (!force && now - last < SYNC_EVERY_MS) return { synced: false };
+  const full = force || now - lastFull > FULL_SYNC_EVERY_MS;
+  let fromDays = RETAIN_DAYS;
+  if (!full) {
+    const newest = await db.prepare("SELECT MAX(start_local) AS m FROM activities").first("m");
+    if (newest) fromDays = Math.min(RETAIN_DAYS, Math.ceil((now - Date.parse(newest.slice(0, 10) + "T00:00:00Z")) / 86400e3) + 2);
+  }
+  const { activities, last: lr } = await searchActivities(env, fromDays);
+  if (!activities.length && lr && lr.status !== 200) throw new HttpError(502, "Garmin svarade HTTP " + lr.status + ": " + (lr.error || ""));
+  const stamp = new Date(now).toISOString();
+  const stmts = [];
+  if (full) stmts.push(db.prepare("DELETE FROM activities WHERE start_local >= ?1").bind(isoDay(fromDays)));
+  for (let i = 0; i < activities.length; i += ROWS_PER_INSERT) {
+    const chunk = activities.slice(i, i + ROWS_PER_INSERT);
+    const values = chunk.map((_, j) => "(?" + (j * 5 + 1) + ", ?" + (j * 5 + 2) + ", ?" + (j * 5 + 3) + ", ?" + (j * 5 + 4) + ", ?" + (j * 5 + 5) + ")").join(", ");
+    const params = chunk.flatMap(a => [a.activityId, String(a.startTimeLocal || ""), (a.activityType && a.activityType.typeKey) || null, JSON.stringify(a), stamp]);
+    stmts.push(db.prepare("INSERT INTO activities (id, start_local, type, raw, updated_at) VALUES " + values +
+      " ON CONFLICT(id) DO UPDATE SET start_local = excluded.start_local, type = excluded.type, raw = excluded.raw, updated_at = excluded.updated_at").bind(...params));
+  }
+  stmts.push(db.prepare("DELETE FROM activities WHERE start_local < ?1").bind(isoDay(RETAIN_DAYS)));
+  stmts.push(metaSet(db, "last_sync", now));
+  if (full) stmts.push(metaSet(db, "last_full_sync", now));
+  await db.batch(stmts);
+  return { synced: true, full, fetched: activities.length };
+}
+
+async function storedActivities(db, days) {
+  const { results } = await db.prepare("SELECT raw FROM activities WHERE start_local >= ?1 ORDER BY start_local DESC").bind(isoDay(days)).all();
+  return "[" + results.map(r => r.raw).join(",") + "]";
+}
+
+async function storageStatus(env) {
+  if (!env.DB) return { db: false };
+  await ensureSchema(env.DB);
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n, MIN(start_local) AS oldest, MAX(start_local) AS newest FROM activities").first();
+  return { db: true, retainDays: RETAIN_DAYS, stored: row ? row.n : 0, oldest: row && row.oldest, newest: row && row.newest, lastSync: Number(await metaGet(env.DB, "last_sync") || 0) || null };
+}
+
+const SETTING_KEY = /^[a-z0-9_-]{1,64}$/;
+const MAX_SETTING_BYTES = 64 * 1024;
+
 // ---------- Routing ----------
 function json(obj, status) {
   return new Response(JSON.stringify(obj), { status: status || 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -218,7 +293,12 @@ export default {
     const url = new URL(req.url);
     const auth = await checkAccess(req, env);
     if (!auth.ok) return new Response(auth.msg, { status: 403, headers: { "content-type": "text/plain; charset=utf-8", ...SECURITY_HEADERS } });
-    if (req.method !== "GET") return json({ error: "Endast GET" }, 405);
+    if (req.method !== "GET" && req.method !== "PUT" && req.method !== "POST") return json({ error: "Metoden stöds inte" }, 405);
+    if (req.method !== "GET") {
+      // Skrivningar bara från sidan själv
+      const origin = req.headers.get("Origin");
+      if (origin !== url.origin) return json({ error: "Fel ursprung" }, 403);
+    }
 
     try {
       if (url.pathname === "/") {
@@ -229,13 +309,45 @@ export default {
       }
       if (url.pathname === "/api/status") {
         await garminToken(env, false);
-        return json({ email: auth.email, garmin: true, tokenExpires: tokenCache.exp });
+        return json({ email: auth.email, garmin: true, tokenExpires: tokenCache.exp, storage: await storageStatus(env) });
       }
+      if (url.pathname === "/api/sync" && req.method === "POST") {
+        if (!env.DB) return json({ error: "Ingen databas kopplad" }, 400);
+        const r = await syncRecent(env, true);
+        return json({ ...r, storage: await storageStatus(env) });
+      }
+      if (url.pathname === "/api/settings") {
+        if (!env.DB) return json({ db: false, settings: {} });
+        await ensureSchema(env.DB);
+        const { results } = await env.DB.prepare("SELECT key, value FROM settings").all();
+        const settings = {};
+        for (const r of results) { try { settings[r.key] = JSON.parse(r.value); } catch (e) {} }
+        return json({ db: true, settings });
+      }
+      const sm = url.pathname.match(/^\/api\/settings\/([^/]+)$/);
+      if (sm && req.method === "PUT") {
+        if (!env.DB) return json({ error: "Ingen databas kopplad" }, 400);
+        const key = decodeURIComponent(sm[1]);
+        if (!SETTING_KEY.test(key)) return json({ error: "Ogiltigt namn" }, 400);
+        const text = await req.text();
+        if (text.length > MAX_SETTING_BYTES) return json({ error: "För stor inställning" }, 413);
+        try { JSON.parse(text); } catch (e) { return json({ error: "Inställningen måste vara JSON" }, 400); }
+        await ensureSchema(env.DB);
+        await env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(key, text, new Date().toISOString()).run();
+        return json({ ok: true });
+      }
+      if (req.method !== "GET") return json({ error: "Metoden stöds inte här" }, 405);
       if (url.pathname === "/api/activities") {
         const days = Math.min(Math.max(parseInt(url.searchParams.get("days") || "90", 10) || 90, 1), 3650);
+        if (env.DB && days <= RETAIN_DAYS) {
+          let note = null;
+          try { await syncRecent(env, false); } catch (e) { note = "Kunde inte hämta nya pass från Garmin: " + e.message; }
+          const body = await storedActivities(env.DB, days);
+          return new Response('{"days":' + days + ',"source":"db"' + (note ? ',"note":' + JSON.stringify(note) : "") + ',"activities":' + body + "}", { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+        }
         const r = await searchActivitiesRaw(env, days);
         if (!r.count && r.status !== 200) return json({ error: "Garmin svarade HTTP " + r.status + ": " + (r.error || "") }, 502);
-        return new Response('{"days":' + days + ',"activities":' + r.body + "}", { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+        return new Response('{"days":' + days + ',"source":"garmin","activities":' + r.body + "}", { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
       }
       const m = url.pathname.match(/^\/api\/activity\/(\d+)$/);
       if (m) {

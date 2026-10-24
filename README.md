@@ -7,7 +7,7 @@ Sidan har fyra flikar:
 - **Översikt:** nyckeltal för vald period jämfört med föregående, tid per vecka per träningsform, belastningsbalans (senaste veckan mot fyra veckors snitt), pulszoner, kalender och senaste passen.
 - **Pass:** alla pass grupperade per vecka med sök, typfilter och sortering. Varje pass öppnas i en detaljvy med pulszoner, jämförelse mot dina andra pass av samma typ och övningar som klockan registrerat.
 - **Trender:** snittpuls, längd och löptempo över tid, andel hård pulstid per vecka, mest tränade rörelser och när i veckan du tränar.
-- **Data:** hämta tre års historik och kör datakartan, som listar alla fält Garmin skickar.
+- **Data:** lagringens status, hämta tre års historik och kör datakartan, som listar alla fält Garmin skickar.
 
 Zonpoäng är en egen uppskattning av belastning: minuter i varje pulszon gånger zonens nummer.
 
@@ -34,9 +34,16 @@ Tre hemligheter läggs in i Cloudflare under **Settings → Variables and Secret
 
 Utan `POLICY_AUD` och `TEAM_DOMAIN` svarar Workern 403 på allt. Varje förfrågan måste ha en giltig, signerad Access-token, så sidan är stängd även om Access av misstag stängs av.
 
+## Lagring
+
+En Cloudflare D1-databas med bindningen `DB` sparar Garmin-pass för de senaste 62 dagarna, så att sidan inte behöver fråga Garmin varje gång. Workern hämtar nya pass högst var tionde minut och läser om hela fönstret en gång per dygn. Äldre pass hämtas från Garmin när sidan behöver dem och sparas inte. Dina egna data, som inställningar, sparas utan tidsgräns.
+
+Tabellerna skapas automatiskt första gången Workern använder databasen. Utan bindningen fungerar sidan som innan, direkt mot Garmin.
+
 ## Säkerhet
 
 - Repot är publikt och innehåller ingen data och inga nycklar. Allt sådant finns bara i Cloudflare.
+- Ändringar (synk och inställningar) tas bara emot från sidan själv, med kontroll av `Origin`.
 - Garmin-nyckeln finns bara som hemlighet i Cloudflare, aldrig i koden eller i webbläsaren.
 - Personal API är skrivskyddat. Nyckeln kan tas bort i Garmin Connect när som helst.
 - Sidan har en strikt Content-Security-Policy och laddar inget från andra domäner.
