@@ -156,6 +156,58 @@ td.empty-field{color:var(--muted); opacity:.6}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){ .spin{animation:none} }
 .toast{position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:8px 14px; border-radius:999px; font-size:14px; z-index:40}
+/* Tillägg: beredskap, anpassning, formulär, loggade pass */
+.topright{display:flex; align-items:center; gap:10px; min-width:0}
+#edit-btn{flex:none}
+#edit-btn[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink)}
+.cards{display:flex; flex-direction:column; gap:14px}
+.bare{display:flex; flex-direction:column; gap:8px}
+.why{list-style:none; margin:4px 0 0; padding:0; display:flex; flex-direction:column; gap:4px; font-size:14px}
+.why li{display:flex; gap:6px; align-items:baseline}
+.why .dot{flex:none; vertical-align:0}
+.h3{font:600 13px var(--f-body); color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin:14px 0 6px}
+details.how{margin-top:10px; font-size:13px; color:var(--muted)}
+details.how summary{cursor:pointer}
+details.how p{margin:6px 0 0}
+.pill.tiny{font-size:10px; padding:1px 6px; vertical-align:1px}
+.list.flush{border:0; border-radius:0; margin:0 -14px -14px}
+.editing .card, .editing .bare{outline:1.5px dashed var(--line); outline-offset:3px}
+.card.off, .bare.off{opacity:.55}
+.edithead{font-size:13px; color:var(--muted); background:var(--sunk); border-radius:10px; padding:10px 12px}
+.edbar{display:flex; justify-content:space-between; align-items:center; gap:8px; margin:-4px 0 10px; padding-bottom:8px; border-bottom:1px solid var(--line)}
+.edbar .en{font-weight:600; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.edbar .eb{display:flex; gap:4px; flex:none}
+.ib{border:1px solid var(--line); background:var(--surface); border-radius:8px; min-width:34px; height:32px; font:600 14px var(--f-body); cursor:pointer; padding:0 8px}
+.ib:disabled{opacity:.35}
+.editfoot{padding-top:4px}
+.form{display:flex; flex-direction:column; gap:10px}
+.form label{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); font-weight:500}
+.form input, .form select, .form textarea{color:var(--ink)}
+textarea{font:15px/1.4 var(--f-body); color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:9px 11px; width:100%; resize:vertical}
+#je{font:12px/1.4 var(--f-mono); min-height:55vh}
+.conds{display:flex; flex-direction:column; gap:8px}
+.cond{display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) auto; gap:6px; align-items:center}
+.cond select, .cond input{min-width:0; width:100%; font-size:14px; padding:8px}
+@media (max-width:480px){ .cond{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto} .cond > :first-child{grid-column:1 / 4} }
+.checks{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px 12px; font-size:14px}
+.checks label{display:flex; gap:6px; align-items:center}
+.checks input{width:18px; height:18px; accent-color:var(--accent)}
+.plist{display:flex; flex-direction:column; gap:6px}
+.prow{display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:9px 12px; cursor:pointer; width:100%}
+.ptext{font-size:14px; line-height:1.5}
+.bench{border-top:1px solid var(--line); padding:10px 0}
+.bench:first-child{border-top:0; padding-top:0}
+.bench .bh{display:flex; flex-direction:column; gap:2px; margin-bottom:6px}
+.vcharts{display:flex; flex-direction:column; gap:14px}
+.vcharts:empty{display:none}
+#psum{font-size:14px}
+#psum:empty{display:none}
+.passbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.passbar .chips{flex:1; min-width:0}
+.hrrow{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px}
+.form input, .form select{min-width:0; width:100%}
+.editing .card > h2{display:none}
+.metrics.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 </style>
 </head>
 <body>
@@ -163,7 +215,7 @@ td.empty-field{color:var(--muted); opacity:.6}
   <div class="wrap">
     <div class="top">
       <h1>Träningsdata</h1>
-      <div class="who" id="who"><span class="dot"></span>Ansluter …</div>
+      <div class="topright"><div class="who" id="who"><span class="dot"></span>Ansluter …</div><button class="btn ghost small" id="edit-btn" aria-pressed="false" hidden>Anpassa</button></div>
     </div>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" data-tab="oversikt" aria-selected="true">Översikt</button>
@@ -174,43 +226,30 @@ td.empty-field{color:var(--muted); opacity:.6}
   </div>
 </header>
 
-<div class="wrap" id="loading" style="padding-block:40px"><div class="note"><span class="spin"></span>Hämtar ditt senaste år från Garmin …</div></div>
+<div class="wrap" id="loading" style="padding-block:40px"><div class="note"><span class="spin"></span>Hämtar dina pass …</div></div>
 <div class="wrap" id="loaderr"></div>
 
 <main class="wrap" id="view-oversikt" hidden>
   <div class="seg" id="period-o"></div>
-  <div class="kpis" id="kpis"></div>
-  <section class="card"><h2>Tid per vecka <small id="wk-note"></small></h2><div class="chart" id="ch-weeks"></div><div class="legend" id="lg-weeks"></div><div class="readout" id="ro-weeks">Tryck på en stapel för att se veckan.</div></section>
-  <section class="card"><h2>Belastningsbalans <small>egen uppskattning</small></h2><div id="acwr"></div><div class="chart" id="ch-acwr"></div><div class="readout" id="ro-acwr"></div></section>
-  <section class="card"><h2>Pulszoner <small id="z-total"></small></h2><div class="zbar" id="z-bar"></div><div class="zrows" id="z-rows"></div></section>
-  <section class="card"><h2>Kalender <small>minuter per dag</small></h2><div id="heat"></div><div class="readout" id="ro-heat">Tryck på en dag för att se passen.</div></section>
-  <section class="card"><h2>Senaste passen</h2><div class="list" id="recent" style="border:0;border-radius:0;margin:0 -14px -14px"></div></section>
+  <div class="cards" id="cards-oversikt"></div>
 </main>
 
 <main class="wrap" id="view-pass" hidden>
   <div class="controls">
     <input id="q" type="search" placeholder="Sök pass eller övning" autocomplete="off">
-    <select id="sort" aria-label="Sortering">
-      <option value="date">Senaste först</option>
-      <option value="dur">Längst</option>
-      <option value="hr">Högst snittpuls</option>
-      <option value="zp">Mest zonpoäng</option>
-      <option value="kcal">Mest kalorier</option>
-    </select>
+    <select id="sort" aria-label="Sortering"></select>
   </div>
   <div class="chips" id="chips"></div>
+  <div class="passbar"><div class="chips" id="vchips"></div><button class="btn small" id="log-new">Logga pass</button></div>
+  <div id="psum"></div>
+  <div class="vcharts" id="vcharts"></div>
   <div class="list" id="list"></div>
 </main>
 
 <main class="wrap" id="view-trender" hidden>
   <div class="seg" id="period-t"></div>
   <div class="chips" id="tchips"></div>
-  <section class="card"><h2>Snittpuls per pass <small>linje = glidande snitt</small></h2><div class="chart" id="ch-hr"></div><div class="readout" id="ro-hr"></div></section>
-  <section class="card"><h2>Längd per pass</h2><div class="chart" id="ch-dur"></div><div class="readout" id="ro-dur"></div></section>
-  <section class="card" id="card-pace" hidden><h2>Löptempo</h2><div class="chart" id="ch-pace"></div><div class="readout" id="ro-pace"></div></section>
-  <section class="card"><h2>Andel tid i zon 4–5 per vecka</h2><div class="chart" id="ch-z45"></div><div class="readout" id="ro-z45"></div></section>
-  <section class="card"><h2>Rörelser <small>reps enligt klockan</small></h2><div class="hbars" id="moves"></div></section>
-  <section class="card"><h2>När du tränar</h2><div class="chart" id="ch-wd"></div><div class="readout" id="ro-wd"></div></section>
+  <div class="cards" id="cards-trender"></div>
 </main>
 
 <main class="wrap" id="view-data" hidden>
@@ -218,6 +257,33 @@ td.empty-field{color:var(--muted); opacity:.6}
     <h2>Lagring</h2>
     <p style="margin:0 0 10px" id="store-note"></p>
     <div class="btnrow"><button class="btn ghost" id="sync-now" hidden>Synka nu</button></div>
+  </section>
+  <section class="card">
+    <h2>Dygnsdata från Garmin</h2>
+    <p class="sub" style="margin:0 0 8px">HRV, vilopuls, sömn, Body Battery och stress. Tabellen visar vad varje del av Garmins API svarade och vilka värden sidan kunde läsa.</p>
+    <div id="daily-diag"></div>
+    <div class="btnrow" style="margin-top:8px"><button class="btn ghost small" id="copy-daily">Kopiera svaren</button></div>
+  </section>
+  <section class="card">
+    <h2>Puls</h2>
+    <p class="sub" style="margin:0 0 8px">Används för Banister TRIMP. Lämna tomt för att använda värdet i grått.</p>
+    <div class="form hrrow"><label>Maxpuls<input id="hr-max" inputmode="numeric"></label><label>Vilopuls<input id="hr-rest" inputmode="numeric"></label></div>
+  </section>
+  <section class="card">
+    <h2>Skärmdumpar</h2>
+    <p class="sub" style="margin:0" id="claude-note"></p>
+  </section>
+  <section class="card">
+    <h2>Persist-arkivet</h2>
+    <p style="margin:0 0 10px" id="persist-note"></p>
+    <label class="btn ghost" style="display:inline-block">Importera fil<input type="file" id="persist-file" accept="application/json,.json" hidden></label>
+    <div id="persist-status"></div>
+    <div id="persist-tracks"></div>
+  </section>
+  <section class="card">
+    <h2>Inställningar</h2>
+    <p style="margin:0 0 10px" id="cfg-note"></p>
+    <div class="btnrow"><button class="btn ghost" id="cfg-json">Redigera som JSON</button><button class="btn ghost" id="cfg-reset">Återställ allt</button></div>
   </section>
   <section class="card">
     <h2>Historik</h2>
@@ -242,473 +308,6 @@ td.empty-field{color:var(--muted); opacity:.6}
   <div class="wrap" style="padding-block:14px 48px; display:flex; flex-direction:column; gap:14px" id="sheet-body"></div>
 </div>
 
-<script>
-"use strict";
-const $ = s => document.querySelector(s);
-const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const DAY = 864e5;
-const store = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } }, set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} } };
-
-// ---------- Typer och format ----------
-const TYPES = {
-  running:["Löpning","run"], trail_running:["Terränglöpning","run"], treadmill_running:["Löpband","run"], track_running:["Bana","run"], indoor_running:["Löpning inne","run"],
-  strength_training:["Styrka","str"], fitness_equipment:["Gym","str"],
-  hiit:["HIIT","hiit"], indoor_cardio:["Kondition inne","hiit"], indoor_rowing:["Rodd inne","hiit"], rowing:["Rodd","hiit"], elliptical:["Crosstrainer","hiit"], stair_climbing:["Trappor","hiit"],
-  cycling:["Cykling","cyc"], indoor_cycling:["Cykel inne","cyc"], road_biking:["Landsväg","cyc"], mountain_biking:["MTB","cyc"], virtual_ride:["Virtuell cykel","cyc"], lap_swimming:["Simning","cyc"], open_water_swimming:["Öppet vatten","cyc"],
-  walking:["Promenad","oth"], hiking:["Vandring","oth"], yoga:["Yoga","oth"], pilates:["Pilates","oth"], mobility:["Rörlighet","oth"], breathwork:["Andning","oth"], other:["Övrigt","oth"]
-};
-const GROUPS = [["hiit","HIIT och kondition"],["str","Styrka"],["run","Löpning"],["cyc","Cykel och sim"],["oth","Övrigt"]];
-const ZC = ["var(--z1)","var(--z2)","var(--z3)","var(--z4)","var(--z5)"];
-const MOVES = { SIT_UP:"Situps", ROW:"Rodd", SQUAT:"Knäböj", DEADLIFT:"Marklyft", PUSH_UP:"Armhävningar", PULL_UP:"Pullups", LUNGE:"Utfall", PLANK:"Planka", BENCH_PRESS:"Bänkpress",
-  SHOULDER_PRESS:"Axelpress", OLYMPIC_LIFT:"Olympiska lyft", CARRY:"Bärövningar", CORE:"Bål", HIP_RAISE:"Höftlyft", CARDIO:"Kondition", TOTAL_BODY:"Helkropp", RUN:"Löpning",
-  SHRUG:"Shrugs", CURL:"Curls", TRICEPS_EXTENSION:"Triceps", LATERAL_RAISE:"Sidolyft", FLYE:"Flyes", CHOP:"Chops", CRUNCH:"Crunches", CALF_RAISE:"Vadpress", LEG_CURL:"Lårcurl",
-  LEG_RAISE:"Benlyft", HYPEREXTENSION:"Ryggresningar", PLYO:"Plyometri", BIKE:"Cykel", HIP_STABILITY:"Höftstabilitet", HIP_SWING:"Kettlebell swing", WARM_UP:"Uppvärmning",
-  BATTLE_ROPE:"Battle rope", SLED:"Släde", SANDBAG:"Sandsäck", SUSPENSION:"Slingträning", TIRE:"Däck", BOX_JUMP:"Boxhopp", BURPEE:"Burpees", UNKNOWN:"Okänd rörelse" };
-const typeKey = a => (a.activityType && a.activityType.typeKey) || "other";
-const typeLabel = k => TYPES[k] ? TYPES[k][0] : k.replace(/_/g," ").replace(/^./, c=>c.toUpperCase());
-const groupOf = k => TYPES[k] ? TYPES[k][1] : (/run/.test(k) ? "run" : /cycl|bik|swim/.test(k) ? "cyc" : /strength/.test(k) ? "str" : "oth");
-const gColor = g => "var(--" + g + ")";
-const moveLabel = c => MOVES[c] || String(c||"").toLowerCase().replace(/_/g," ").replace(/^./, x=>x.toUpperCase());
-
-const pad = n => String(n).padStart(2,"0");
-function clock(s){ if(s==null) return "–"; s=Math.round(s); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return h ? h+":"+pad(m)+":"+pad(x) : m+":"+pad(x); }
-function hm(sec){ const m=Math.round((sec||0)/60); const h=Math.floor(m/60); return h ? h+" h "+pad(m%60)+" min" : m+" min"; }
-function hmShort(sec){ const m=Math.round((sec||0)/60); const h=Math.floor(m/60); return h ? h+"h"+pad(m%60) : m+"m"; }
-function num(v,d){ return v==null || isNaN(v) ? "–" : Number(v).toLocaleString("sv-SE",{maximumFractionDigits:d==null?0:d}); }
-function km(m){ return m ? (m/1000).toLocaleString("sv-SE",{maximumFractionDigits:2}) + " km" : "–"; }
-function paceTxt(mps){ if(!mps) return "–"; const s=1000/mps; return Math.floor(s/60)+":"+pad(Math.round(s%60))+" /km"; }
-function parseLocal(s){ const m=/(\d+)-(\d+)-(\d+)[ T](\d+):(\d+)/.exec(s||""); return m ? new Date(+m[1], m[2]-1, +m[3], +m[4], +m[5]) : new Date(NaN); }
-function sod(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function monday(d){ const s=sod(d); s.setDate(s.getDate()-((s.getDay()+6)%7)); return s; }
-function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-function isoWeek(d){ const t=new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day=(t.getUTCDay()+6)%7; t.setUTCDate(t.getUTCDate()-day+3); const f=new Date(Date.UTC(t.getUTCFullYear(),0,4)); return 1+Math.round(((t-f)/864e5-3+((f.getUTCDay()+6)%7))/7); }
-function dayKey(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
-function dateTxt(d, withYear){ return d.toLocaleDateString("sv-SE",{weekday:"short", day:"numeric", month:"short", year: withYear || d.getFullYear()!==new Date().getFullYear() ? "numeric" : undefined}); }
-function shortDate(d){ return d.getDate()+"/"+(d.getMonth()+1); }
-const median = arr => { const a=arr.filter(v=>v!=null && !isNaN(v)).sort((x,y)=>x-y); if(!a.length) return null; const m=a.length>>1; return a.length%2 ? a[m] : (a[m-1]+a[m])/2; };
-const sum = (arr,f) => arr.reduce((s,x)=>s+(f(x)||0),0);
-function toast(t){ const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),1800); }
-
-// ---------- Normalisering ----------
-function norm(a){
-  const zr=[1,2,3,4,5].map(i=>a["hrTimeInZone_"+i]);
-  const zones = zr.some(v=>v!=null) ? zr.map(v=>v||0) : null;
-  const type = typeKey(a);
-  return {
-    id:a.activityId, name:a.activityName || typeLabel(type), type, grp:groupOf(type), date:parseLocal(a.startTimeLocal),
-    dur:a.duration||0, moving:a.movingDuration, dist:a.distance||0, speed:a.averageSpeed, avgHR:a.averageHR, maxHR:a.maxHR, kcal:a.calories,
-    zones, zp: zones ? zones.reduce((s,v,i)=>s+v/60*(i+1),0) : null,
-    z45: zones && sum(zones,v=>v) ? (zones[3]+zones[4]) / sum(zones,v=>v) : null,
-    im:(a.moderateIntensityMinutes||0) + 2*(a.vigorousIntensityMinutes||0), mod:a.moderateIntensityMinutes, vig:a.vigorousIntensityMinutes,
-    bb:a.differenceBodyBattery, sets:Array.isArray(a.summarizedExerciseSets) ? a.summarizedExerciseSets : [],
-    totalSets:a.totalSets!=null ? a.totalSets : a.activeSets, totalReps:a.totalReps, steps:a.steps,
-    teA:a.aerobicTrainingEffect, teAn:a.anaerobicTrainingEffect, load:a.activityTrainingLoad, elev:a.elevationGain, vo2:a.vO2MaxValue, raw:a
-  };
-}
-
-// ---------- Tillstånd ----------
-const S = { all:[], loadedDays:365, tab:store.get("tab","oversikt"), period:store.get("period",28), tperiod:store.get("tperiod",84), ttype:"", q:"", type:"", sort:"date" };
-const byId = id => S.all.find(x=>String(x.id)===String(id));
-
-async function api(path){
-  const r = await fetch(path, {headers:{Accept:"application/json"}});
-  let j=null; try{ j=await r.json(); }catch(e){}
-  if(!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
-  return j;
-}
-
-const RECENT_DAYS = 62;
-function setData(j, days){
-  S.all = (j.activities||[]).map(norm).filter(x=>!isNaN(x.date)).sort((a,b)=>b.date-a.date);
-  S.loadedDays = days; S.source = j.source || "garmin";
-  $("#loading").hidden = true;
-  showTab(S.tab);
-}
-function bgNote(text){ $("#loaderr").innerHTML = text ? '<div class="note" style="padding:10px 0 0"><span class="spin"></span>' + esc(text) + '</div>' : ""; }
-async function load(days){
-  $("#loaderr").innerHTML="";
-  if(!S.all.length){ $("#loading").hidden=false; $("#loading").innerHTML = '<div class="note"><span class="spin"></span>Hämtar dina pass …</div>'; }
-  try{
-    // Med databas: visa de senaste två månaderna direkt, hämta resten från Garmin i bakgrunden
-    if(S.storage && S.storage.db && days > RECENT_DAYS && !S.all.length){
-      try{ setData(await api("/api/activities?days=" + RECENT_DAYS), RECENT_DAYS); }catch(e){}
-    }
-    if(S.all.length) bgNote("Hämtar " + (days>400 ? "tre års" : "ett års") + " historik från Garmin …");
-    setData(await api("/api/activities?days=" + days), days);
-    bgNote("");
-  }catch(e){
-    $("#loading").hidden = true;
-    $("#loaderr").innerHTML = '<div class="banner" style="margin-top:14px">' + esc(e.message) + '</div>';
-  }
-}
-
-// ---------- Flikar ----------
-const RENDER = { oversikt:renderOverview, pass:renderPass, trender:renderTrends, data:renderData };
-function showTab(name){
-  if(!RENDER[name]) name="oversikt";
-  S.tab=name; store.set("tab",name);
-  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===name));
-  ["oversikt","pass","trender","data"].forEach(t=>{ $("#view-"+t).hidden = t!==name || (!S.all.length && t!=="data"); });
-  RENDER[name]();
-}
-document.querySelector(".tabs").onclick = e=>{ const b=e.target.closest(".tab"); if(b){ showTab(b.dataset.tab); window.scrollTo(0,0); } };
-let rT; window.addEventListener("resize", ()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.all.length) RENDER[S.tab](); }, 150); });
-
-function segment(el, options, value, onPick){
-  el.innerHTML = options.map(o=>'<button data-v="' + o[0] + '" aria-pressed="' + (o[0]===value) + '">' + o[1] + '</button>').join("");
-  el.onclick = e=>{ const b=e.target.closest("button"); if(b) onPick(+b.dataset.v); };
-}
-const PERIODS = [[7,"7 d"],[28,"4 v"],[84,"12 v"],[365,"1 år"]];
-
-// ---------- Diagram (SVG) ----------
-function niceMax(v){ if(v<=0) return 1; const p=Math.pow(10,Math.floor(Math.log10(v))); const n=v/p; return (n<=1?1:n<=2?2:n<=5?5:10)*p; }
-function W(el){ return Math.max(260, Math.round(el.clientWidth || 320)); }
-
-// Staplar per kategori. series: [{color, vals}], staplas ovanpå varandra.
-function barChart(el, labels, series, opt){
-  opt = opt || {};
-  const w=W(el), h=opt.h||170, L=34, R=6, T=8, B=20, n=labels.length;
-  const totals = labels.map((_,i)=>series.reduce((s,se)=>s+(se.vals[i]||0),0));
-  const max = opt.max || niceMax(Math.max(...totals, opt.minMax||0));
-  const bw = (w-L-R)/n, gap = Math.max(1, Math.min(6, bw*0.25));
-  const y = v => T + (h-T-B) * (1 - v/max);
-  let s = '<svg viewBox="0 0 ' + w + ' ' + h + '" role="img">';
-  for(let k=0;k<=3;k++){ const v=max*k/3, yy=y(v); s += '<line class="grid" x1="' + L + '" x2="' + (w-R) + '" y1="' + yy + '" y2="' + yy + '"/><text x="' + (L-5) + '" y="' + (yy+3) + '" text-anchor="end">' + esc(opt.fmt ? opt.fmt(v) : num(v)) + '</text>'; }
-  if(opt.ref!=null && opt.ref<=max){ const yy=y(opt.ref); s += '<line x1="' + L + '" x2="' + (w-R) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--muted)" stroke-dasharray="3 3"/>'; }
-  labels.forEach((lb,i)=>{
-    const x = L + i*bw + gap/2; let acc=0;
-    series.forEach(se=>{ const v=se.vals[i]||0; if(!v) return; const y1=y(acc+v), y0=y(acc); s += '<rect x="' + x.toFixed(1) + '" y="' + y1.toFixed(1) + '" width="' + (bw-gap).toFixed(1) + '" height="' + Math.max(0.5,y0-y1).toFixed(1) + '" fill="' + se.color + '" rx="2"/>'; acc+=v; });
-    if(opt.sel===i) s += '<rect x="' + (x-1) + '" y="' + T + '" width="' + (bw-gap+2) + '" height="' + (h-T-B) + '" fill="none" stroke="var(--ink)" stroke-width="1" rx="3"/>';
-    const every = Math.ceil(n / Math.max(1, Math.floor((w-L)/34)));
-    if(i % every === 0 || i===n-1 && n<14) s += '<text x="' + (x+(bw-gap)/2) + '" y="' + (h-5) + '" text-anchor="middle">' + esc(lb) + '</text>';
-  });
-  s += '</svg>';
-  el.innerHTML = s;
-  el.querySelector("svg").onclick = ev=>{
-    const r=ev.currentTarget.getBoundingClientRect(); const px=(ev.clientX-r.left)*w/r.width;
-    const i=Math.floor((px-L)/bw); if(i>=0 && i<n && opt.onPick){ opt.sel=i; barChart(el, labels, series, opt); opt.onPick(i); }
-  };
-}
-
-// Punkter över tid med glidande snitt. pts: [{x:Date, y:Number, ref}]
-function lineChart(el, pts, opt){
-  opt = opt || {};
-  if(pts.length < 2){ el.innerHTML = '<div class="note">För få pass i perioden.</div>'; return; }
-  const w=W(el), h=opt.h||170, L=38, R=8, T=10, B=20;
-  const xs=pts.map(p=>+p.x), ys=pts.map(p=>p.y);
-  const x0=Math.min(...xs), x1=Math.max(...xs) || x0+1;
-  let y0=Math.min(...ys), y1=Math.max(...ys); const padY=(y1-y0)*0.12 || 1; y0-=padY; y1+=padY;
-  const X = v => L + (w-L-R) * ((v-x0)/((x1-x0)||1));
-  const Y = v => opt.invert ? T + (h-T-B)*((v-y0)/(y1-y0)) : T + (h-T-B)*(1-(v-y0)/(y1-y0));
-  let s = '<svg viewBox="0 0 ' + w + ' ' + h + '" role="img">';
-  for(let k=0;k<=3;k++){ const v=y0+(y1-y0)*k/3, yy=Y(v); s += '<line class="grid" x1="' + L + '" x2="' + (w-R) + '" y1="' + yy + '" y2="' + yy + '"/><text x="' + (L-5) + '" y="' + (yy+3) + '" text-anchor="end">' + esc(opt.fmt ? opt.fmt(v) : num(v)) + '</text>'; }
-  [0, 0.5, 1].forEach(f=>{ const t=x0+(x1-x0)*f; s += '<text x="' + X(t) + '" y="' + (h-5) + '" text-anchor="' + (f===0?"start":f===1?"end":"middle") + '">' + shortDate(new Date(t)) + '</text>'; });
-  if(opt.band){ const a=Y(Math.min(Math.max(opt.band[0],y0),y1)), b=Y(Math.min(Math.max(opt.band[1],y0),y1)); s += '<rect x="' + L + '" width="' + (w-L-R) + '" y="' + Math.min(a,b) + '" height="' + Math.abs(a-b) + '" fill="var(--good)" fill-opacity=".12"/>'; }
-  const k = opt.raw ? 1 : Math.max(3, Math.min(8, Math.round(pts.length/6)));
-  const roll = pts.map((p,i)=>{ const win=pts.slice(Math.max(0,i-k+1), i+1); return [X(+p.x), Y(win.reduce((a,b)=>a+b.y,0)/win.length)]; });
-  s += '<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="' + roll.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ") + '"/>';
-  pts.forEach((p,i)=>{ s += '<circle cx="' + X(+p.x).toFixed(1) + '" cy="' + Y(p.y).toFixed(1) + '" r="' + (opt.sel===i?5:3) + '" fill="' + (p.color||"var(--accent)") + '" fill-opacity="' + (opt.sel===i?1:.55) + '"' + (opt.sel===i?' stroke="var(--ink)" stroke-width="1.5"':'') + '/>'; });
-  s += '</svg>';
-  el.innerHTML = s;
-  el.querySelector("svg").onclick = ev=>{
-    const r=ev.currentTarget.getBoundingClientRect(); const px=(ev.clientX-r.left)*w/r.width, py=(ev.clientY-r.top)*h/r.height;
-    let best=-1, bd=1e9; pts.forEach((p,i)=>{ const d=Math.hypot(X(+p.x)-px, (Y(p.y)-py)*0.5); if(d<bd){ bd=d; best=i; } });
-    if(best>=0 && opt.onPick){ opt.sel=best; lineChart(el, pts, opt); opt.onPick(pts[best]); }
-  };
-}
-
-function zoneBar(z, thin){
-  const t = z ? sum(z,v=>v) : 0;
-  if(!t) return '<div class="zbar' + (thin?" thin":"") + '"></div>';
-  return '<div class="zbar' + (thin?" thin":"") + '" aria-label="Pulszoner">' + z.map((v,i)=>v ? '<span style="width:' + (v/t*100).toFixed(2) + '%;background:' + ZC[i] + '"></span>' : "").join("") + '</div>';
-}
-function openBtn(id){ return '<button class="btn ghost small" data-open="' + id + '">Öppna</button>'; }
-document.addEventListener("click", e=>{ const b=e.target.closest("[data-open]"); if(b){ e.preventDefault(); openSession(b.dataset.open); } });
-
-// ---------- Översikt ----------
-function renderOverview(){
-  segment($("#period-o"), PERIODS, S.period, v=>{ S.period=v; store.set("period",v); renderOverview(); });
-  const days=S.period, now=new Date(), from=addDays(sod(now), -days+1), prevFrom=addDays(from, -days);
-  const cur=S.all.filter(x=>x.date>=from), prev=S.all.filter(x=>x.date>=prevFrom && x.date<from);
-  const canCmp = S.loadedDays >= days*2;
-  const weeksIn = days/7;
-  const kp = [
-    ["Pass", cur.length, prev.length, v=>num(v)],
-    ["Träningstid", sum(cur,x=>x.dur), sum(prev,x=>x.dur), v=>hm(v)],
-    ["Intensitetsminuter / vecka", sum(cur,x=>x.im)/weeksIn, sum(prev,x=>x.im)/weeksIn, v=>num(v)],
-    ["Zonpoäng", sum(cur,x=>x.zp), sum(prev,x=>x.zp), v=>num(v)],
-  ];
-  $("#kpis").innerHTML = kp.map(k=>{
-    let d="";
-    if(canCmp && k[2]){ const p=(k[1]-k[2])/k[2]*100; const cls=Math.abs(p)<5?"flat":p>0?"up":"down"; d='<span class="delta ' + cls + '">' + (p>0?"▲ ":p<0?"▼ ":"") + num(Math.abs(p)) + ' % mot förra ' + (days===7?"veckan":"perioden") + '</span>'; }
-    else if(canCmp) d='<span class="delta flat">ingen jämförelse</span>';
-    return '<div class="kpi"><span>' + k[0] + '</span><b>' + k[3](k[1]) + '</b>' + d + '</div>';
-  }).join("");
-
-  // Tid per vecka, staplat per grupp
-  const nW = Math.min(52, Math.max(8, Math.ceil(days/7)));
-  const w0 = addDays(monday(now), -7*(nW-1));
-  const weeks = Array.from({length:nW},(_,i)=>addDays(w0, 7*i));
-  const per = {}; GROUPS.forEach(g=>per[g[0]]=new Array(nW).fill(0));
-  const wkSessions = weeks.map(()=>[]);
-  S.all.forEach(x=>{ if(x.date<w0) return; const i=Math.floor((monday(x.date)-w0)/(7*DAY)+0.01); if(i>=0 && i<nW){ per[x.grp][i]+=x.dur/60; wkSessions[i].push(x); } });
-  const groupsUsed = GROUPS.filter(g=>per[g[0]].some(v=>v));
-  const avgMin = weeks.length ? groupsUsed.reduce((s,g)=>s+per[g[0]].reduce((a,b)=>a+b,0),0)/nW : 0;
-  $("#wk-note").textContent = "snitt " + hm(avgMin*60) + " / vecka";
-  barChart($("#ch-weeks"), weeks.map(d=>"v"+isoWeek(d)), groupsUsed.map(g=>({color:gColor(g[0]), vals:per[g[0]]})), {
-    fmt:v=>num(v/60,1)+" h", max:Math.max(180, Math.ceil(Math.max(...weeks.map((_,i)=>groupsUsed.reduce((s,g)=>s+per[g[0]][i],0)))/180)*180),
-    onPick:i=>{ const ss=wkSessions[i]; $("#ro-weeks").innerHTML = '<b>Vecka ' + isoWeek(weeks[i]) + '</b> · ' + ss.length + ' pass · ' + hm(sum(ss,x=>x.dur)) + ' · ' + num(sum(ss,x=>x.zp)) + ' zonpoäng' +
-      (ss.length ? '<div class="btnrow" style="margin-top:8px">' + ss.slice().reverse().map(x=>'<button class="btn ghost small" data-open="' + x.id + '">' + esc(dateTxt(x.date).split(" ")[0]) + ' ' + esc(x.name) + '</button>').join("") + '</div>' : ""); }
-  });
-  $("#lg-weeks").innerHTML = groupsUsed.map(g=>'<span><i style="background:' + gColor(g[0]) + '"></i>' + g[1] + '</span>').join("");
-
-  // Belastningsbalans: senaste 7 dagars zonpoäng mot snittet per vecka de senaste 28 dagarna
-  const daily = {}; S.all.forEach(x=>{ const k=dayKey(x.date); daily[k]=(daily[k]||0)+(x.zp||0); });
-  const zpBetween = (a,b)=>{ let t=0; for(let d=new Date(a); d<b; d=addDays(d,1)) t+=daily[dayKey(d)]||0; return t; };
-  const ratioAt = end=>{ const acute=zpBetween(addDays(end,-7), end); const chronic=zpBetween(addDays(end,-28), end)/4; return chronic>0 ? {acute, chronic, r:acute/chronic} : null; };
-  const today1 = addDays(sod(now),1);
-  const nowR = ratioAt(today1);
-  if(nowR){
-    const r=nowR.r; const [lab,cls,txt] = r<0.8 ? ["Lägre än vanligt","warn","Den senaste veckan har varit lättare än din vanliga nivå."] : r<=1.3 ? ["I balans","good","Den senaste veckan ligger i linje med din vanliga nivå."] : r<=1.5 ? ["Ökar snabbt","warn","Den senaste veckan är tydligt tyngre än din vanliga nivå."] : ["Mycket över","bad","Den senaste veckan är mycket tyngre än din vanliga nivå. Se till att återhämta."];
-    $("#acwr").innerHTML = '<div class="verdict"><span class="pill ' + cls + '">' + lab + '</span><b style="font:700 22px var(--f-display)">' + num(r,2) + '</b></div><div class="sub">' + txt + ' Senaste 7 dagarna: ' + num(nowR.acute) + ' zonpoäng, snitt per vecka senaste 28 dagarna: ' + num(nowR.chronic) + '.</div>';
-    const pts=[]; for(let i=Math.min(nW,26)-1;i>=0;i--){ const end=addDays(today1,-7*i); const q=ratioAt(end); if(q) pts.push({x:addDays(end,-1), y:q.r, ref:q}); }
-    lineChart($("#ch-acwr"), pts, { h:140, raw:true, band:[0.8,1.3], fmt:v=>num(v,1), onPick:p=>{ $("#ro-acwr").innerHTML = '<b>Veckan till ' + shortDate(p.x) + '</b> · kvot ' + num(p.y,2) + ' · ' + num(p.ref.acute) + ' zonpoäng mot snitt ' + num(p.ref.chronic); } });
-    $("#ro-acwr").textContent = "Kvoten mellan senaste veckans och de senaste fyra veckornas belastning. Det gröna bandet, 0,8–1,3, brukar räknas som i balans.";
-  } else { $("#acwr").innerHTML = '<div class="note">Behöver minst några veckor med pulsdata.</div>'; $("#ch-acwr").innerHTML=""; $("#ro-acwr").textContent=""; }
-
-  // Pulszoner i perioden
-  const zt=[0,0,0,0,0]; cur.forEach(x=>{ if(x.zones) x.zones.forEach((v,i)=>zt[i]+=v); });
-  const ztot=sum(zt,v=>v);
-  $("#z-total").textContent = ztot ? hm(ztot) + " med puls" : "";
-  $("#z-bar").outerHTML = zoneBar(ztot?zt:null).replace('class="zbar"','class="zbar" id="z-bar"');
-  $("#z-rows").innerHTML = ztot ? zt.map((v,i)=>'<div class="zrow"><b>Z' + (i+1) + '</b><div class="t"><span style="width:' + (v/Math.max(...zt)*100).toFixed(1) + '%;background:' + ZC[i] + '"></span></div><span class="v">' + hmShort(v) + ' · ' + num(v/ztot*100) + '%</span></div>').join("") : '<div class="note">Ingen pulsdata i perioden.</div>';
-
-  renderHeat(days>=365 ? 26 : 13);
-
-  $("#recent").innerHTML = S.all.slice(0,5).map(rowHtml).join("") || '<div class="empty">Inga pass ännu.</div>';
-}
-
-function renderHeat(nW){
-  const now=new Date(), w0=addDays(monday(now), -7*(nW-1));
-  const mins={}, list={}; S.all.forEach(x=>{ const k=dayKey(x.date); mins[k]=(mins[k]||0)+x.dur/60; (list[k]=list[k]||[]).push(x); });
-  const lvl = m => !m ? 0 : m<30 ? .3 : m<60 ? .55 : m<90 ? .8 : 1;
-  let cells="";
-  for(let r=0;r<7;r++) for(let c=0;c<nW;c++){
-    const d=addDays(w0, c*7+r), k=dayKey(d), m=mins[k]||0, fut=d>now;
-    cells += '<button style="grid-row:' + (r+1) + ';grid-column:' + (c+1) + ';' + (m ? 'background:color-mix(in srgb, var(--accent) ' + Math.round(lvl(m)*100) + '%, var(--sunk))' : '') + (fut?';opacity:.25':'') + '"' + (dayKey(now)===k?' class="today"':'') + ' data-day="' + k + '" aria-label="' + k + ', ' + Math.round(m) + ' minuter"></button>';
-  }
-  $("#heat").innerHTML = '<div class="heatwrap"><div class="heatdays" style="grid-template-rows:repeat(7,1fr)">' + ["M","T","O","T","F","L","S"].map(x=>'<span>'+x+'</span>').join("") + '</div><div class="heat" style="grid-template-columns:repeat(' + nW + ',1fr)">' + cells + '</div></div>';
-  $("#heat").onclick = e=>{ const b=e.target.closest("[data-day]"); if(!b) return; const ss=(list[b.dataset.day]||[]); const d=parseLocal(b.dataset.day+" 00:00");
-    $("#ro-heat").innerHTML = '<b>' + esc(dateTxt(d)) + '</b> · ' + (ss.length ? ss.length + ' pass, ' + hm(sum(ss,x=>x.dur)) + '<div class="btnrow" style="margin-top:8px">' + ss.map(x=>'<button class="btn ghost small" data-open="' + x.id + '">' + esc(x.name) + ' · ' + hmShort(x.dur) + '</button>').join("") + '</div>' : 'vilodag'); };
-}
-
-// ---------- Passlistan ----------
-function rowHtml(x){
-  const right = x.dist ? km(x.dist) : hmShort(x.dur);
-  const sub = x.avgHR ? Math.round(x.avgHR) + " bpm" : (x.kcal ? x.kcal + " kcal" : "");
-  return '<button class="row" data-open="' + x.id + '"><span class="stripe" style="background:' + gColor(x.grp) + '"></span>' +
-    '<span style="min-width:0"><span class="name">' + esc(x.name) + '</span><span class="meta">' + esc(typeLabel(x.type)) + ' · ' + esc(dateTxt(x.date)) + ' ' + pad(x.date.getHours()) + ':' + pad(x.date.getMinutes()) + (x.dist ? ' · ' + hmShort(x.dur) : '') + '</span></span>' +
-    '<span class="nums">' + esc(right) + '<small>' + esc(sub) + '</small></span>' + (x.zones ? zoneBar(x.zones, true) : '') + '</button>';
-}
-function renderPass(){
-  const counts={}; S.all.forEach(x=>counts[x.type]=(counts[x.type]||0)+1);
-  const keys=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
-  $("#chips").innerHTML = '<button class="chip" data-t="" aria-pressed="' + (!S.type) + '">Alla<span class="n">' + S.all.length + '</span></button>' +
-    keys.map(k=>'<button class="chip" data-t="' + esc(k) + '" aria-pressed="' + (S.type===k) + '"><span class="dot" style="background:' + gColor(groupOf(k)) + '"></span>' + esc(typeLabel(k)) + '<span class="n">' + counts[k] + '</span></button>').join("");
-  const q=S.q.trim().toLowerCase();
-  let list = S.all.filter(x=>(!S.type || x.type===S.type) && (!q || (x.name+" "+typeLabel(x.type)+" "+x.type+" "+x.sets.map(s=>moveLabel(s.category)).join(" ")).toLowerCase().includes(q)));
-  const sorters = { dur:(a,b)=>b.dur-a.dur, hr:(a,b)=>(b.avgHR||0)-(a.avgHR||0), zp:(a,b)=>(b.zp||0)-(a.zp||0), kcal:(a,b)=>(b.kcal||0)-(a.kcal||0) };
-  if(!list.length){ $("#list").innerHTML='<div class="empty">Inga pass matchar.</div>'; return; }
-  let html="";
-  if(S.sort==="date"){
-    let lastW=null, groupRows=[];
-    const flush=()=>{ if(!groupRows.length) return; const ss=groupRows; html += '<div class="wk"><span>Vecka ' + isoWeek(ss[0].date) + (ss[0].date.getFullYear()!==new Date().getFullYear() ? ", " + ss[0].date.getFullYear() : "") + '</span><span>' + ss.length + ' pass · ' + hm(sum(ss,x=>x.dur)) + ' · ' + num(sum(ss,x=>x.zp)) + ' zp</span></div>' + ss.map(rowHtml).join(""); groupRows=[]; };
-    list.slice(0,500).forEach(x=>{ const w=+monday(x.date); if(w!==lastW){ flush(); lastW=w; } groupRows.push(x); }); flush();
-  } else {
-    html = list.slice().sort(sorters[S.sort]).slice(0,200).map(rowHtml).join("");
-  }
-  $("#list").innerHTML = html;
-}
-$("#chips").onclick = e=>{ const b=e.target.closest(".chip"); if(!b) return; S.type=b.dataset.t; renderPass(); };
-$("#q").oninput = e=>{ S.q=e.target.value; renderPass(); };
-$("#sort").onchange = e=>{ S.sort=e.target.value; renderPass(); };
-
-// ---------- Passdetalj ----------
-function openSheet(title){ $("#sheet-title").textContent=title; $("#sheet").hidden=false; document.body.style.overflow="hidden"; $("#sheet").scrollTop=0; }
-function closeSheet(){ $("#sheet").hidden=true; document.body.style.overflow=""; }
-$("#back").onclick = closeSheet;
-document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !$("#sheet").hidden) closeSheet(); });
-function metric(label, value){ return value==null || value==="–" ? "" : '<div class="metric"><b>' + esc(value) + '</b><span>' + esc(label) + '</span></div>'; }
-
-function openSession(id){
-  const x = byId(id); if(!x) return;
-  S.openId = x.id;
-  openSheet(x.name);
-  const isRun = x.grp==="run";
-  const m = [
-    metric("Tid", clock(x.dur)), metric("Aktiv tid", x.moving && Math.abs(x.moving-x.dur)>30 ? clock(x.moving) : null),
-    metric("Distans", x.dist ? km(x.dist) : null), metric("Tempo", isRun && x.speed ? paceTxt(x.speed) : null),
-    metric("Snittpuls", x.avgHR ? Math.round(x.avgHR)+" bpm" : null), metric("Maxpuls", x.maxHR ? Math.round(x.maxHR)+" bpm" : null),
-    metric("Kalorier", x.kcal ? x.kcal+" kcal" : null), metric("Zonpoäng", x.zp!=null ? num(x.zp) : null),
-    metric("Intensitetsminuter", x.im ? num(x.im) : null), metric("Body Battery", x.bb!=null ? (x.bb>0?"+":"")+x.bb : null),
-    metric("Set", x.totalSets || null), metric("Reps", x.totalReps || null),
-    metric("Aerob effekt", x.teA!=null ? num(x.teA,1) : null), metric("Anaerob effekt", x.teAn!=null ? num(x.teAn,1) : null),
-    metric("Belastning", x.load!=null ? num(x.load) : null), metric("Höjdmeter", x.elev ? Math.round(x.elev)+" m" : null),
-    metric("Steg", !isRun && x.steps ? num(x.steps) : null)
-  ].join("");
-  let html = '<div class="sub">' + esc(typeLabel(x.type)) + ' · ' + esc(dateTxt(x.date, true)) + ' kl ' + pad(x.date.getHours()) + ':' + pad(x.date.getMinutes()) + '</div><div class="metrics">' + m + '</div>';
-
-  if(x.zones){
-    const t=sum(x.zones,v=>v), mx=Math.max(...x.zones);
-    html += '<section class="card"><h2>Pulszoner <small>' + num(x.z45*100) + ' % i zon 4–5</small></h2>' + zoneBar(x.zones) + '<div class="zrows">' +
-      x.zones.map((v,i)=>'<div class="zrow"><b>Z' + (i+1) + '</b><div class="t"><span style="width:' + (v/mx*100).toFixed(1) + '%;background:' + ZC[i] + '"></span></div><span class="v">' + clock(v) + ' · ' + num(v/t*100) + '%</span></div>').join("") + '</div></section>';
-  }
-
-  const peers = S.all.filter(p=>p.type===x.type && p.id!==x.id);
-  if(peers.length>=3){
-    const rows = [["Längd", p=>p.dur, v=>hmShort(v)], ["Snittpuls", p=>p.avgHR, v=>num(v)], ["Kalorier", p=>p.kcal, v=>num(v)], ["Zonpoäng", p=>p.zp, v=>num(v)], ["Zon 4–5", p=>p.z45!=null?p.z45*100:null, v=>num(v)+" %"]];
-    let c="";
-    rows.forEach(([lab,f,fmt])=>{
-      const me=f(x), vals=peers.map(f).filter(v=>v!=null && !isNaN(v)); if(me==null || vals.length<3) return;
-      const lo=Math.min(...vals,me), hi=Math.max(...vals,me), md=median(vals), pos=v=>((v-lo)/((hi-lo)||1)*100).toFixed(1);
-      const d = md ? (me-md)/md*100 : 0;
-      c += '<div class="r"><span>' + lab + '<span class="sub" style="display:block">' + fmt(me) + '</span></span><div class="track" title="Median ' + fmt(md) + '"><div class="rng"></div><div class="med" style="left:' + pos(md) + '%"></div><div class="me" style="left:' + pos(me) + '%"></div></div><span class="d">' + (d>0?"+":"") + num(d) + ' %</span></div>';
-    });
-    if(c) html += '<section class="card"><h2>Mot dina ' + esc(typeLabel(x.type).toLowerCase()) + '-pass <small>' + peers.length + ' andra pass</small></h2><div class="cmp">' + c + '</div><div class="legend"><span><i style="background:var(--accent);border-radius:50%"></i>det här passet</span><span><i style="background:var(--muted);width:2px"></i>median</span><span>linjen visar min till max</span></div></section>';
-  }
-
-  if(x.sets.length){
-    const mx=Math.max(...x.sets.map(s=>s.reps||0),1);
-    html += '<section class="card"><h2>Övningar <small>enligt klockan</small></h2><div class="ex">' + x.sets.slice().sort((a,b)=>(b.reps||0)-(a.reps||0)).map(s=>
-      '<div class="r"><span>' + esc(moveLabel(s.category)) + '</span><em>' + num(s.reps) + ' reps · ' + num(s.sets) + ' set' + (s.duration ? ' · ' + clock(s.duration/1000) : '') + '</em><div class="t"><span style="width:' + ((s.reps||0)/mx*100).toFixed(1) + '%"></span></div></div>').join("") + '</div></section>';
-  }
-
-  html += '<section class="card" id="det"><h2>Fler detaljer</h2><div class="note"><span class="spin"></span>Hämtar från Garmin …</div></section>';
-  $("#sheet-body").innerHTML = html;
-  loadDetails(x);
-}
-
-async function loadDetails(x){
-  try{
-    const j = await api("/api/activity/" + x.id);
-    if(S.openId !== x.id || $("#sheet").hidden) return;
-    const d = j.details || {}, sm = d.summaryDTO || {};
-    let html = '<h2>Fler detaljer</h2><div class="metrics" style="margin-bottom:10px">' +
-      metric("Lägsta puls", sm.minHR ? sm.minHR+" bpm" : null) + metric("Vätskeförlust", sm.waterEstimated ? sm.waterEstimated+" ml" : null) +
-      metric("Tidszon", d.timeZoneUnitDTO && d.timeZoneUnitDTO.timeZone) + metric("Varv/rundor", (d.splitSummaries||[]).map(s=>s.noOfSplits).filter(Boolean)[0] || null) + '</div>';
-    html += '<details class="raw"><summary>Rådata från Garmin</summary><pre>' + esc(JSON.stringify({listPost:x.raw, detaljer:d, workouts:j.workouts}, null, 1)) + '</pre></details>';
-    $("#det").innerHTML = html;
-  }catch(e){ $("#det").innerHTML = '<h2>Fler detaljer</h2><div class="banner">' + esc(e.message) + '</div>'; }
-}
-
-// ---------- Trender ----------
-function renderTrends(){
-  segment($("#period-t"), PERIODS.slice(1), S.tperiod, v=>{ S.tperiod=v; store.set("tperiod",v); renderTrends(); });
-  const from = addDays(sod(new Date()), -S.tperiod+1);
-  const inP = S.all.filter(x=>x.date>=from);
-  const counts={}; inP.forEach(x=>counts[x.type]=(counts[x.type]||0)+1);
-  const types=Object.keys(counts).filter(k=>counts[k]>=2).sort((a,b)=>counts[b]-counts[a]);
-  if(S.ttype && !types.includes(S.ttype)) S.ttype="";
-  $("#tchips").innerHTML = '<button class="chip" data-t="" aria-pressed="' + (!S.ttype) + '">Alla</button>' + types.map(k=>'<button class="chip" data-t="' + esc(k) + '" aria-pressed="' + (S.ttype===k) + '"><span class="dot" style="background:' + gColor(groupOf(k)) + '"></span>' + esc(typeLabel(k)) + '<span class="n">' + counts[k] + '</span></button>').join("");
-  $("#tchips").onclick = e=>{ const b=e.target.closest(".chip"); if(!b) return; S.ttype=b.dataset.t; renderTrends(); };
-  const sel = inP.filter(x=>!S.ttype || x.type===S.ttype).slice().sort((a,b)=>a.date-b.date);
-  const pick = ro => p => { const x=p.ref; $(ro).innerHTML = '<b>' + esc(x.name) + '</b> · ' + esc(dateTxt(x.date)) + ' · ' + hmShort(x.dur) + (x.avgHR?' · '+Math.round(x.avgHR)+' bpm':'') + ' ' + openBtn(x.id); };
-  const hrPts = sel.filter(x=>x.avgHR).map(x=>({x:x.date, y:x.avgHR, ref:x, color:gColor(x.grp)}));
-  lineChart($("#ch-hr"), hrPts, { fmt:v=>num(v), onPick:pick("#ro-hr") });
-  $("#ro-hr").textContent = hrPts.length>=2 ? "Median " + num(median(hrPts.map(p=>p.y))) + " bpm. Tryck på en punkt för att se passet." : "";
-  const dPts = sel.map(x=>({x:x.date, y:x.dur/60, ref:x, color:gColor(x.grp)}));
-  lineChart($("#ch-dur"), dPts, { fmt:v=>num(v)+"m", onPick:pick("#ro-dur") });
-  $("#ro-dur").textContent = dPts.length>=2 ? "Median " + num(median(dPts.map(p=>p.y))) + " minuter." : "";
-  const runs = sel.filter(x=>x.grp==="run" && x.speed>0 && x.dist>500);
-  $("#card-pace").hidden = runs.length<2;
-  if(runs.length>=2){ lineChart($("#ch-pace"), runs.map(x=>({x:x.date, y:1000/x.speed/60, ref:x})), { invert:true, fmt:v=>Math.floor(v)+":"+pad(Math.round(v%1*60)), onPick:p=>{ const x=p.ref; $("#ro-pace").innerHTML='<b>' + esc(x.name) + '</b> · ' + km(x.dist) + ' · ' + paceTxt(x.speed) + ' ' + openBtn(x.id); } }); $("#ro-pace").textContent="Högre upp är snabbare."; }
-
-  // Zon 4–5 per vecka
-  const nW = Math.max(4, Math.round(S.tperiod/7)), w0=addDays(monday(new Date()), -7*(nW-1));
-  const zw = Array.from({length:nW},()=>[0,0]);
-  sel.forEach(x=>{ if(!x.zones) return; const i=Math.floor((monday(x.date)-w0)/(7*DAY)+0.01); if(i>=0&&i<nW){ zw[i][0]+=x.zones[3]+x.zones[4]; zw[i][1]+=sum(x.zones,v=>v); } });
-  const share = zw.map(z=>z[1] ? z[0]/z[1]*100 : 0);
-  barChart($("#ch-z45"), Array.from({length:nW},(_,i)=>"v"+isoWeek(addDays(w0,7*i))), [{color:"var(--z4)", vals:share}], { max:100, fmt:v=>num(v)+"%", h:140,
-    onPick:i=>{ $("#ro-z45").innerHTML = '<b>Vecka ' + isoWeek(addDays(w0,7*i)) + '</b> · ' + num(share[i]) + ' % av ' + hm(zw[i][1]) + ' med puls i zon 4–5'; } });
-  $("#ro-z45").textContent = "Hur stor del av pulstiden som var hård.";
-
-  // Rörelser
-  const mv={}; sel.forEach(x=>x.sets.forEach(s=>{ if(!s.category) return; const m=mv[s.category]||(mv[s.category]={reps:0,sets:0,n:0}); m.reps+=s.reps||0; m.sets+=s.sets||0; m.n++; }));
-  const top=Object.entries(mv).filter(e=>e[0]!=="UNKNOWN" || e[1].reps).sort((a,b)=>b[1].reps-a[1].reps).slice(0,10); const mx=top.length?top[0][1].reps||1:1;
-  $("#moves").innerHTML = top.length ? '<div class="ex">' + top.map(([c,m])=>'<div class="r"><span>' + esc(moveLabel(c)) + '</span><em>' + num(m.reps) + ' reps · ' + m.n + ' pass</em><div class="t"><span style="width:' + (m.reps/mx*100).toFixed(1) + '%"></span></div></div>').join("") + '</div>' : '<div class="note">Inga övningar registrerade av klockan i perioden.</div>';
-
-  // Veckodagar
-  const wd=[0,0,0,0,0,0,0], tod={morgon:0, dag:0, kväll:0};
-  sel.forEach(x=>{ wd[(x.date.getDay()+6)%7]++; const h=x.date.getHours(); if(h<10) tod.morgon++; else if(h<16) tod.dag++; else tod.kväll++; });
-  barChart($("#ch-wd"), ["mån","tis","ons","tor","fre","lör","sön"], [{color:"var(--accent)", vals:wd}], { h:130, fmt:v=>num(v), onPick:i=>{ $("#ro-wd").innerHTML='<b>' + ["Måndagar","Tisdagar","Onsdagar","Torsdagar","Fredagar","Lördagar","Söndagar"][i] + '</b> · ' + wd[i] + ' pass'; } });
-  $("#ro-wd").textContent = sel.length ? "Morgon (före 10): " + tod.morgon + " · dag: " + tod.dag + " · kväll (efter 16): " + tod.kväll : "";
-}
-
-// ---------- Data ----------
-function renderData(){
-  const oldest = S.all.length ? S.all[S.all.length-1].date : null;
-  $("#hist-note").textContent = S.all.length ? S.all.length + " pass hämtade, från " + dateTxt(oldest, true) + ". Sidan hämtar ditt senaste år när den öppnas." : "Inga pass hämtade än.";
-  $("#load3").hidden = S.loadedDays>=1095;
-  const st = S.storage || {};
-  if(!st.db){ $("#store-note").textContent = "Ingen databas är kopplad. Allt hämtas direkt från Garmin varje gång sidan öppnas."; $("#sync-now").hidden = true; }
-  else {
-    const when = st.lastSync ? new Date(st.lastSync).toLocaleString("sv-SE",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}) : "aldrig";
-    $("#store-note").textContent = st.stored + " pass sparade i databasen, de senaste " + st.retainDays + " dagarna. Senast synkad " + when + ". Äldre pass hämtas från Garmin när de behövs och sparas inte.";
-    $("#sync-now").hidden = false;
-  }
-}
-$("#sync-now").onclick = async ()=>{
-  const b=$("#sync-now"); b.disabled=true; b.innerHTML='<span class="spin"></span>Synkar …';
-  try{
-    const r = await fetch("/api/sync", {method:"POST", headers:{Accept:"application/json"}});
-    const j = await r.json().catch(()=>null);
-    if(!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
-    S.storage = j.storage; toast(j.fetched + " pass hämtade från Garmin"); renderData();
-  }catch(e){ toast("Synken misslyckades: " + e.message); }
-  b.disabled=false; b.textContent="Synka nu";
-};
-$("#load3").onclick = ()=>load(1095);
-
-let PROBE = null;
-$("#run-probe").onclick = async ()=>{
-  const b=$("#run-probe"); b.disabled=true; b.innerHTML='<span class="spin"></span>Kör …'; $("#probe-summary").innerHTML="";
-  try{ PROBE = await api("/api/probe"); renderProbe(); $("#copy-report").disabled=false; }
-  catch(e){ $("#probe-summary").innerHTML='<div class="banner">' + esc(e.message) + '</div>'; }
-  b.disabled=false; b.textContent="Kör igen";
-};
-function renderProbe(){
-  const ok=PROBE.results.filter(r=>r.status===200).length;
-  $("#probe-summary").innerHTML = '<div class="kpis"><div class="kpi"><span>Delar som svarade</span><b>' + ok + '/' + PROBE.results.length + '</b></div><div class="kpi"><span>Pass senaste 90 d</span><b>' + PROBE.activityCount + '</b></div></div>';
-  const el=$("#probe"); el.hidden=false;
-  el.innerHTML = PROBE.results.map((r,i)=>{
-    const fields=Object.entries(r.fields||{}), filled=fields.filter(f=>f[1].filled>0).length, ok=r.status===200;
-    return '<details data-i="' + i + '"><summary><span class="code ' + (ok?"ok":"err") + '">' + r.status + '</span><span class="lbl">' + esc(r.label) + '<small>' + esc(r.path) + '</small></span><span class="cnt">' +
-      (ok ? (r.bytes && !fields.length ? Math.round(r.bytes/1024)+" kB" : r.records + " st<br>" + filled + "/" + fields.length + " fält") : "fel") + '</span></summary><div class="fields">' +
-      (r.error ? '<div class="banner">' + esc(r.error) + '</div>' : "") +
-      (fields.length ? '<div class="ftable"><table>' + fields.map(f=>'<tr><td class="k' + (f[1].filled?"":" empty-field") + '">' + esc(f[0]) + '</td><td class="v">' + esc(f[1].types.join("/")) + '</td><td class="v">' + f[1].filled + '/' + f[1].seen + '</td></tr>').join("") + '</table></div>' : "") +
-      ((ok && fields.length && r.id!=="aktiviteter") ? '<div class="btnrow"><button class="btn ghost small rawbtn">Visa rådata</button></div><div class="rawbox"></div>' : "") + '</div></details>';
-  }).join("");
-}
-$("#probe").onclick = async e=>{
-  const b=e.target.closest(".rawbtn"); if(!b) return;
-  const d=b.closest("details"), r=PROBE.results[+d.dataset.i], box=d.querySelector(".rawbox");
-  b.disabled=true; box.innerHTML='<div class="note"><span class="spin"></span>Hämtar …</div>';
-  try{ const path = r.raw ? "/api/raw?id=" + r.raw.activityId + "&kind=" + r.raw.kind : "/api/raw?ep=" + encodeURIComponent(r.id); const j=await api(path); box.innerHTML='<pre>' + esc(JSON.stringify(j.data,null,1)) + '</pre>'; }
-  catch(err){ box.innerHTML='<div class="banner">' + esc(err.message) + '</div>'; }
-};
-$("#copy-report").onclick = async ()=>{
-  const lines=["DATAKARTA " + PROBE.generated.slice(0,10), "Pass senaste 90 d: " + PROBE.activityCount, "Typer: " + Object.entries(PROBE.types).sort((a,b)=>b[1]-a[1]).map(t=>t[0]+" "+t[1]).join(", "), ""];
-  PROBE.results.forEach(r=>{ lines.push("== " + r.label + "  HTTP " + r.status + "  " + r.records + " poster  " + r.ms + " ms"); lines.push("   " + r.path); if(r.error) lines.push("   FEL: " + String(r.error).replace(/\s+/g," ").slice(0,200)); Object.entries(r.fields||{}).forEach(f=>lines.push("   " + f[0] + ": " + f[1].types.join("/") + " (" + f[1].filled + "/" + f[1].seen + ")")); lines.push(""); });
-  const text=lines.join("\n");
-  try{ await navigator.clipboard.writeText(text); toast("Rapporten är kopierad"); }
-  catch(e){ const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); toast("Rapporten är kopierad"); }catch(e2){ toast("Kunde inte kopiera"); } ta.remove(); }
-};
-
-// ---------- Start ----------
-document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===S.tab));
-api("/api/status").then(s=>{ S.storage=s.storage||{db:false}; $("#who").innerHTML='<span class="dot ok"></span>' + esc(s.email || "Ansluten"); })
-  .catch(e=>{ S.storage={db:false}; $("#who").innerHTML='<span class="dot err"></span>Garmin ej ansluten'; })
-  .finally(()=>load(365));
-</script>
+<script>/*APP*/</script>
 </body>
 </html>

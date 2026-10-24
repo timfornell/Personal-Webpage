@@ -8,7 +8,7 @@ keep_vars = true
 
 [[rules]]
 type = "Text"
-globs = ["**/*.html"]
+globs = ["**/*.html", "**/*.client.js"]
 fallthrough = true
 
 # D1-databasen som sparar de senaste två månadernas pass och dina inställningar.
