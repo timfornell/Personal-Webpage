@@ -2,10 +2,14 @@
 
 Tims personliga webbplats. Första delen är en träningsdashboard som hämtar Garmin-data via Garmin Connect Personal API och visar den på en mobilanpassad sida bakom Cloudflare Access. Just nu är den en prototyp för att se vilken data Garmin ger.
 
-Prototypen har två vyer:
+Sidan har fyra flikar:
 
-- **Pass:** alla aktiviteter för vald period, med sök, typfilter, minuter per vecka och en detaljvy per pass med alla fält Garmin skickar.
-- **Datakarta:** anropar varje del av API:et en gång och listar vilka fält som finns och hur ofta de är ifyllda. Rapporten kan kopieras utan värden.
+- **Översikt:** nyckeltal för vald period jämfört med föregående, tid per vecka per träningsform, belastningsbalans (senaste veckan mot fyra veckors snitt), pulszoner, kalender och senaste passen.
+- **Pass:** alla pass grupperade per vecka med sök, typfilter och sortering. Varje pass öppnas i en detaljvy med pulszoner, jämförelse mot dina andra pass av samma typ och övningar som klockan registrerat.
+- **Trender:** snittpuls, längd och löptempo över tid, andel hård pulstid per vecka, mest tränade rörelser och när i veckan du tränar.
+- **Data:** hämta tre års historik och kör datakartan, som listar alla fält Garmin skickar.
+
+Zonpoäng är en egen uppskattning av belastning: minuter i varje pulszon gånger zonens nummer.
 
 ## Struktur
 
