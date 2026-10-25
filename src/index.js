@@ -5,7 +5,7 @@
 //   GARMIN_API_KEY     din Garmin Personal API-nyckel
 //   POLICY_AUD         Application Audience (AUD) Tag från Cloudflare Access
 //   TEAM_DOMAIN        t.ex. https://ditt-team.cloudflareaccess.com
-//   ANTHROPIC_API_KEY  valfri: läser CrossFit-pass från screenshots
+//   ANTHROPIC_API_KEY  valfri: läser CrossFit-pass från skärmdumpar och ger passförslag
 //
 // En D1-databas med bindningen DB (se wrangler.toml) sparar de senaste två
 // månadernas pass och dygnsdata, och dina egna data utan tidsgräns.
@@ -21,13 +21,15 @@ import C_CORE from "./client/core.client.js";
 import C_CHARTS from "./client/charts.client.js";
 import C_METRICS from "./client/metrics.client.js";
 import C_FIT from "./client/fit.client.js";
+import C_HRQ from "./client/hrq.client.js";
 import C_VIEWS from "./client/views.client.js";
+import C_ISSUES from "./client/besvar.client.js";
 import C_PLAN from "./client/plan.client.js";
 import C_CUSTOM from "./client/custom.client.js";
 import C_EXTRA from "./client/extra.client.js";
 import C_MAIN from "./client/main.client.js";
 
-const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_VIEWS, C_PLAN, C_CUSTOM, C_EXTRA, C_MAIN].join("\n"));
+const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_HRQ, C_VIEWS, C_ISSUES, C_PLAN, C_CUSTOM, C_EXTRA, C_MAIN].join("\n"));
 
 // ---------- Cloudflare Access ----------
 let certCache = { keys: null, at: 0 };
@@ -364,6 +366,7 @@ async function ensureSchema(db) {
     db.prepare("CREATE INDEX IF NOT EXISTS logs_date ON logs (date)"),
     db.prepare("CREATE TABLE IF NOT EXISTS persist (id TEXT PRIMARY KEY, track TEXT, pt TEXT, dt TEXT, title TEXT, sort TEXT, data TEXT NOT NULL)"),
     db.prepare("CREATE INDEX IF NOT EXISTS persist_pt ON persist (pt, sort)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS items (kind TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (kind, id))"),
   ]);
   const v = Number(await metaGet(db, "schema") || 1);
   if (v < 2) {
@@ -459,10 +462,15 @@ async function storageStatus(env) {
   const daily = await env.DB.prepare("SELECT COUNT(*) AS n FROM daily").first("n");
   const logs = await env.DB.prepare("SELECT COUNT(*) AS n FROM logs").first("n");
   const persist = await env.DB.prepare("SELECT COUNT(*) AS n FROM persist").first("n");
-  return { db: true, retainDays: RETAIN_DAYS, stored: row ? row.n : 0, oldest: row && row.oldest, newest: row && row.newest, daily, logs, persist,
+  const { results: kinds } = await env.DB.prepare("SELECT kind, COUNT(*) AS n FROM items GROUP BY kind").all();
+  const items = Object.fromEntries(kinds.map(k => [k.kind, k.n]));
+  return { db: true, retainDays: RETAIN_DAYS, stored: row ? row.n : 0, oldest: row && row.oldest, newest: row && row.newest, daily, logs, persist, items,
     lastSync: Number(await metaGet(env.DB, "last_sync") || 0) || null, lastDailySync: Number(await metaGet(env.DB, "last_daily_sync") || 0) || null };
 }
 
+// Egna poster utan tidsgräns: pulskontroll per pass och besvär
+const ITEM_KINDS = { hrcheck: 16 * 1024, issue: 64 * 1024, suggest: 32 * 1024 };
+const ITEM_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const SETTING_KEY = /^[a-z0-9_-]{1,64}$/;
 const MAX_SETTING_BYTES = 64 * 1024;
 const MAX_LOG_BYTES = 32 * 1024;
@@ -522,6 +530,78 @@ async function parseScreenshot(env, image) {
   const use = j && Array.isArray(j.content) && j.content.find(c => c.type === "tool_use");
   if (!use) throw new HttpError(502, "Claude gav inget pass tillbaka");
   return { parsed: use.input, model: j.model };
+}
+
+// ---------- Passförslag (Claude) ----------
+// Sidan skickar en sammanfattning den själv räknat fram (nivå, belastning, besvär, veckans pass) och
+// vilka kategorier som finns i Persist-arkivet. Claude svarar med en struktur och filter, inte med
+// övningar. Sidan filtrerar sedan arkivet själv, och du väljer passet. Inga pass skickas till Claude.
+const REGION_IDS = ["ben", "drag", "tryck", "bal"];
+function suggestTool(cats) {
+  const cat = cats.length ? { type: "string", enum: cats } : { type: "string" };
+  return {
+    name: "foreslag_struktur",
+    description: "Ge en struktur för dagens pass och filter för att välja pass ur arkivet.",
+    input_schema: {
+      type: "object",
+      properties: {
+        rubrik: { type: "string", description: "Kort namn på passtypen, t.ex. 'Lugn överkroppsstyrka och kort metcon'" },
+        bedomning: { type: "string", enum: ["passar", "passar med anpassning", "avråder"], description: "Hur väl önskemålet passar dagens läge" },
+        varfor: { type: "string", description: "2–4 meningar om varför, med hänvisning till mätvärdena i underlaget" },
+        intensitet: { type: "string", enum: ["lätt", "måttlig", "hård"] },
+        puls: { type: ["string", "null"], description: "Pulsriktmärke i slag per minut om det är relevant, räknat ur maxpulsen i underlaget" },
+        struktur: { type: "array", description: "Passets delar i ordning, utan specifika övningar", items: { type: "object", properties: { del: { type: "string" }, innehall: { type: "string", description: "Längd, fokus, intensitet och vad som ska undvikas" } }, required: ["del", "innehall"] } },
+        filter: {
+          type: "object",
+          properties: {
+            kategorier: { type: "array", items: cat, description: "Passkategorier ur arkivet som passar, tom lista om inget arkivpass passar (t.ex. löpning)" },
+            langd_min: { type: ["number", "null"] }, langd_max: { type: ["number", "null"] },
+            fokus_undvik: { type: "array", items: { type: "string", enum: REGION_IDS }, description: "Kroppsdelar som inte ska vara passets huvudfokus" },
+            fokus_helst: { type: "array", items: { type: "string", enum: REGION_IDS }, description: "Kroppsdelar som gärna får vara huvudfokus" },
+          },
+          required: ["kategorier", "fokus_undvik", "fokus_helst"],
+        },
+        undvik: { type: "array", items: { type: "string" } },
+      },
+      required: ["rubrik", "bedomning", "varfor", "intensitet", "struktur", "filter", "undvik"],
+    },
+  };
+}
+const SUGGEST_SYSTEM = [
+  "Du är en erfaren tränare som hjälper en person som tränar CrossFit, styrka och löpning att välja dagens pass.",
+  "Du får ett underlag som sidan har räknat fram: dagens beredskapsnivå med skäl, sidans egna gör/undvik-regler, belastning, återhämtningsdata, besvär som personen själv graderat och passen de senaste sju dagarna.",
+  "Du ska inte skriva ett pass med övningar. Svara med en struktur för passet och filter som sidan använder för att välja pass ur personens Persist-arkiv. Personen väljer själv passet.",
+  "Regler:",
+  "1. Använd bara uppgifterna i underlaget. Hitta inte på mätvärden, vikter, RPE eller historik.",
+  "2. Kroppsdelarna är ben, drag (rygg och dragövningar), tryck (bröst, axlar, pressar) och bal (bålen). CrossFit använder hela kroppen, så en kroppsdel som belastats tungt nyligen ska inte vara huvudfokus, men behöver inte undvikas helt.",
+  "3. Besvär på nivå 3 betyder att kroppsdelen inte ska vara huvudfokus och att övningar som gör ondare ska bytas. Nivå 4 betyder att den inte ska belastas. Är ett besvär värre dagen efter ett pass, minska den typen av belastning.",
+  "4. Om önskemålet inte passar dagens läge, till exempel hårt på en Vila-dag, sätt bedomning till avråder, säg varför rakt och ge struktur och filter för en lättare variant. Lyd inte bara.",
+  "5. Välj bara kategorier som finns i listan. Passar inget arkivpass, till exempel för löpning, lämna kategorier tom och beskriv passet i strukturen.",
+  "6. Ställ inga diagnoser. Vid besvär som stoppar träning, föreslå att låta en fysioterapeut titta på det.",
+  "7. Skriv på svenska, kort och konkret.",
+].join("\n");
+
+async function suggestSession(env, body) {
+  if (!env.ANTHROPIC_API_KEY) throw new HttpError(400, "ANTHROPIC_API_KEY saknas i Cloudflare.");
+  const cats = (Array.isArray(body.categories) ? body.categories : []).filter(c => typeof c === "string" && c.length <= 60).slice(0, 30);
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY.trim(), "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim(),
+      max_tokens: 2000,
+      system: SUGGEST_SYSTEM,
+      tools: [suggestTool(cats)],
+      tool_choice: { type: "tool", name: "foreslag_struktur" },
+      messages: [{ role: "user", content: "Önskemål: " + JSON.stringify(body.request || {}) + "\n\nKategorier i arkivet: " + JSON.stringify(cats) + "\n\nUnderlag:\n" + JSON.stringify(body.context || {}) }],
+    }),
+  });
+  const text = await r.text();
+  let j = null; try { j = JSON.parse(text); } catch (e) {}
+  if (!r.ok) throw new HttpError(502, "Claude svarade HTTP " + r.status + ": " + ((j && j.error && j.error.message) || text.slice(0, 200)));
+  const use = j && Array.isArray(j.content) && j.content.find(c => c.type === "tool_use");
+  if (!use) throw new HttpError(502, "Claude gav inget förslag tillbaka");
+  return { suggestion: use.input, model: j.model, usage: j.usage || null };
 }
 
 function logRow(r) {
@@ -609,6 +689,34 @@ export default {
         await ensureSchema(env.DB);
         await env.DB.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(key, text, new Date().toISOString()).run();
         return json({ ok: true });
+      }
+
+      if (path === "/api/suggest" && req.method === "POST") {
+        const body = await readJson(req, 40e3);
+        return json(await suggestSession(env, body));
+      }
+      // Pulskontroll, besvär och sparade förslag
+      const im = path.match(/^\/api\/items\/([a-z]+)(?:\/([^/]+))?$/);
+      if (im && ITEM_KINDS[im[1]]) {
+        const kind = im[1], id = im[2] ? decodeURIComponent(im[2]) : null;
+        if (!id && req.method === "GET") {
+          if (!env.DB) return json({ db: false, items: {} });
+          await ensureSchema(env.DB);
+          const { results } = await env.DB.prepare("SELECT id, data FROM items WHERE kind = ?1").bind(kind).all();
+          // Skickas vidare utan att tolkas, för att spara CPU-tid
+          return new Response('{"db":true,"items":{' + results.map(r => JSON.stringify(r.id) + ":" + r.data).join(",") + "}}", { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
+        }
+        if (id && (req.method === "PUT" || req.method === "DELETE")) {
+          needDb(env); await ensureSchema(env.DB);
+          if (!ITEM_ID.test(id)) return json({ error: "Ogiltigt id" }, 400);
+          if (req.method === "DELETE") { await env.DB.prepare("DELETE FROM items WHERE kind = ?1 AND id = ?2").bind(kind, id).run(); return json({ ok: true }); }
+          const text = await req.text();
+          if (text.length > ITEM_KINDS[kind]) return json({ error: "Posten är för stor" }, 413);
+          try { const v = JSON.parse(text); if (!v || typeof v !== "object" || Array.isArray(v)) throw 0; } catch (e) { return json({ error: "Posten måste vara ett JSON-objekt" }, 400); }
+          await env.DB.prepare("INSERT INTO items (kind, id, data, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(kind, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at").bind(kind, id, text, new Date().toISOString()).run();
+          return json({ ok: true });
+        }
+        return json({ error: "Metoden stöds inte här" }, 405);
       }
 
       // Loggade pass
