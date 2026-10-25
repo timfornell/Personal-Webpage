@@ -241,6 +241,13 @@ textarea{font:15px/1.4 var(--f-body); color:var(--ink); background:var(--surface
 .ilog .r:first-child{border-top:0}
 .ilog .r:not(:has(button)){grid-template-columns:minmax(0,1fr) auto}
 details.card > summary{cursor:pointer; font-weight:600}
+.musc{display:flex; flex-direction:column; gap:6px}
+.mrow{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.6fr); gap:8px; align-items:center; font-size:14px}
+.mrow .seg button{padding:5px 2px; font-size:12px}
+.sgsum{display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:10px; background:var(--sunk); margin-top:8px}
+.sgsum b{font-size:15px}
+.chip .cl{display:inline-block; font-size:10px; font-weight:700; color:var(--accent); margin-left:3px}
+.chip[aria-pressed="true"] .cl{color:inherit}
 </style>
 </head>
 <body>
