@@ -402,6 +402,7 @@ function openSession(id){
   if(hq && x.hrq.state !== "ok") html += '<section class="card" id="hrqcard">' + hq + '</section>';
   html += '<section class="card" id="logcard"></section>';
   html += '<section class="card" id="issuecard"></section>';
+  html += '<section class="card" id="musccard"></section>';
 
   if(x.zones){
     const t = x.zt, mx = Math.max(...x.zones);
@@ -433,6 +434,7 @@ function openSession(id){
   $("#prof-btn").onclick = () => toggleProfileEditor(x);
   renderLogCard(x);
   renderIssueCard(x);
+  renderMuscCard(x);
   loadDetails(x);
   loadFitCard(x);
 }
