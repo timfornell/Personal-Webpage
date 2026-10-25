@@ -165,10 +165,21 @@ function sleepState(key){
 }
 
 // ---------- Pulsvärden ----------
+// Maxpuls: inställd, annars det högsta värdet som minst två pass når (inom 5 slag).
+// En ensam topp räknas inte, och inget över 220, så att korta pulstoppar inte blir din maxpuls.
+let HRMAXC = null;
+const HR_CEIL = 220;
 function hrMax(){
   if(CFG && CFG.hr && CFG.hr.max) return { v: +CFG.hr.max, src:"inställt" };
-  const v = Math.max(0, ...S.all.map(x => x.maxHR || 0));
-  return v ? { v, src:"högsta i dina pass" } : { v: null, src:"saknas" };
+  if(HRMAXC) return HRMAXC;
+  const marks = (CFG && CFG.hrMarks) || {};
+  const vals = S.all.filter(x => marks[x.id] !== "bad").map(x => { const it = typeof HRQ !== "undefined" ? HRQ.items[x.id] : null; return it && it.top ? it.top : x.g ? x.g.maxHR : x.maxHR; })
+    .filter(v => v > 0 && v <= HR_CEIL).sort((a, b) => b - a);
+  let v = null, src = "saknas";
+  for(let i = 0; i < vals.length - 1; i++) if(vals[i] - vals[i+1] <= 5){ v = vals[i]; src = "uppskattad ur dina pass"; break; }
+  if(v == null && vals.length){ v = vals[0]; src = "högsta i dina pass"; }
+  HRMAXC = { v, src };
+  return HRMAXC;
 }
 function hrRest(){
   if(CFG && CFG.hr && CFG.hr.rest) return { v: +CFG.hr.rest, src:"inställt" };
@@ -240,7 +251,8 @@ function readiness(){
       if(two && (rhr.elevated || sl.short)) cap(0, "HRV under ditt band två dagar i rad, och " + (rhr.elevated ? "vilopulsen är förhöjd" : "kort sömn") + ".", 2);
       else cap(1, two ? "HRV under ditt band två dagar i rad." : "HRV:s 7-dagarssnitt under ditt band.", two ? 2 : 1);
     } else why.push({ txt: "HRV:s 7-dagarssnitt " + (hrv.state === "high" ? "över" : "inom") + " ditt band (" + num(hrv.ms7) + " ms, band " + num(hrv.msLo) + "–" + num(hrv.msHi) + ").", sev: 0 });
-  } else why.push({ txt: hrv.base < 14 ? "HRV-bandet behöver 14 nätter baslinje, har " + hrv.base + ". Bedömningen bygger på belastning och sömn." : "För få HRV-mätningar senaste veckan (" + hrv.cur + " av minst 3).", sev: 1 });
+  } else if(!S.daily.slice(-28).some(d => d.hrv > 0)) why.push({ txt: "Ingen HRV från klockan. Bedömningen bygger på vilopuls, sömn och belastning.", sev: 0 });
+  else why.push({ txt: hrv.base < 14 ? "HRV-bandet behöver 14 nätter baslinje, har " + hrv.base + ". Bedömningen bygger på vilopuls, sömn och belastning." : "För få HRV-mätningar senaste veckan (" + hrv.cur + " av minst 3).", sev: 1 });
   if(rhr.ok && rhr.elevated) cap(2, "Vilopulsen " + num(rhr.diff, 1) + " slag över din baslinje.", 1);
   else if(rhr.ok) why.push({ txt: "Vilopulsen normal (" + num(rhr.m7) + " bpm, 7 dagar).", sev: 0 });
   if(sl.ok && sl.short) cap(2, "Kort sömn i natt: " + hm(sl.last) + (sl.med ? ", du brukar sova " + hm(sl.med) : "") + ".", 1);
@@ -264,12 +276,13 @@ function readiness(){
 // ---------- Löpning ----------
 // Intensitetsfördelning: andel pulstid i zon 1–2, 3 och 4–5
 function intensitySplit(list){
-  const z = [0,0,0,0,0]; list.forEach(x => { if(x.zones) x.zones.forEach((v, i) => z[i] += v); });
+  const z = [0,0,0,0,0]; list.forEach(x => { if(x.zones && x.hrOk !== false) x.zones.forEach((v, i) => z[i] += v); });
   const t = sum(z); if(!t) return null;
   return { easy:(z[0]+z[1])/t, mid:z[2]/t, hard:(z[3]+z[4])/t, total:t };
 }
 // Puls vid fast tempo: snittpuls på löppass inom ±4 % av mediantempot för lugna pass
 function hrAtPace(runs){
+  runs = runs.filter(x => x.hrOk !== false);
   const easy = runs.filter(x => x.easy && x.speed > 0);
   const ref = median((easy.length >= 3 ? easy : runs.filter(x => x.speed > 0)).map(x => x.speed));
   if(!ref) return null;

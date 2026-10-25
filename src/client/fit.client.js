@@ -98,12 +98,13 @@ function decoupling(recs){
   return { pct: (a - b)/a*100, first: a*60, second: b*60, minutes: durMin };
 }
 
-const FITC = {};
-async function loadFit(id){
-  if(FITC[id]) return FITC[id];
+async function fetchFit(id){
   const r = await fetch("/api/fit/" + id);
   if(!r.ok){ let j = null; try{ j = await r.json(); }catch(e){} throw new Error((j && j.error) || ("HTTP " + r.status)); }
-  const recs = parseFit(await unzipFirst(await r.arrayBuffer()));
-  FITC[id] = recs;
-  return recs;
+  return parseFit(await unzipFirst(await r.arrayBuffer()));
+}
+const FITC = {};
+async function loadFit(id){
+  if(!FITC[id]) FITC[id] = await fetchFit(id);
+  return FITC[id];
 }

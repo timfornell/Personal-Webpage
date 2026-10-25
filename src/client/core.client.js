@@ -69,28 +69,34 @@ const gColor = g => "var(--" + g + ")";
 const moveLabel = c => MOVES[c] || String(c||"").toLowerCase().replace(/_/g," ").replace(/^./, x => x.toUpperCase());
 
 // ---------- Normalisering av ett pass ----------
+// Zoner och allt som räknas ur dem. Anropas igen när pulskontrollen rensar ett pass.
+function deriveHr(x, zones){
+  const zt = zones ? sum(zones) : 0;
+  x.zones = zones; x.zt = zt;
+  x.zp = zones ? zones.reduce((s,v,i) => s + v/60*(i+1), 0) : null;      // Edwards TRIMP
+  x.z12 = zt ? (zones[0]+zones[1])/zt : null; x.z3 = zt ? zones[2]/zt : null; x.z45 = zt ? (zones[3]+zones[4])/zt : null;
+  // Lugnt löppass: under 10 % av pulstiden i zon 4–5 och minst 15 minuter
+  x.easy = x.grp === "run" && zt > 0 && x.z45 < 0.10 && x.dur >= 900 && x.dist > 2000;
+  // Effektivitetsfaktor: meter per minut delat med snittpuls, bara lugna löppass med pålitlig puls (TrainingPeaks)
+  x.ef = x.easy && x.hrOk !== false && x.speed > 0 && x.avgHR > 0 ? (x.speed*60) / x.avgHR : null;
+}
 function norm(a){
   const zr = [1,2,3,4,5].map(i => a["hrTimeInZone_" + i]);
   const zones = zr.some(v => v != null) ? zr.map(v => v || 0) : null;
-  const zt = zones ? sum(zones) : 0;
   const type = typeKey(a);
   const grp = groupOf(type);
   const date = parseLocal(a.startTimeLocal);
   const x = {
     id: a.activityId, name: a.activityName || typeLabel(type), type, grp, date, day: dayKey(date),
     dur: a.duration || 0, moving: a.movingDuration, dist: a.distance || 0, speed: a.averageSpeed, avgHR: a.averageHR, maxHR: a.maxHR, kcal: a.calories,
-    zones, zt,
-    zp: zones ? zones.reduce((s,v,i) => s + v/60*(i+1), 0) : null,      // Edwards TRIMP
-    z12: zt ? (zones[0]+zones[1])/zt : null, z3: zt ? zones[2]/zt : null, z45: zt ? (zones[3]+zones[4])/zt : null,
     im: (a.moderateIntensityMinutes||0) + 2*(a.vigorousIntensityMinutes||0),
     bb: a.differenceBodyBattery, sets: Array.isArray(a.summarizedExerciseSets) ? a.summarizedExerciseSets : [],
     totalSets: a.totalSets != null ? a.totalSets : a.activeSets, totalReps: a.totalReps, steps: a.steps,
     teA: a.aerobicTrainingEffect, teAn: a.anaerobicTrainingEffect, load: a.activityTrainingLoad, elev: a.elevationGain, vo2: a.vO2MaxValue, raw: a
   };
-  // Lugnt löppass: under 10 % av pulstiden i zon 4–5 och minst 15 minuter
-  x.easy = grp === "run" && zt > 0 && x.z45 < 0.10 && x.dur >= 900 && x.dist > 2000;
-  // Effektivitetsfaktor: meter per minut delat med snittpuls, bara lugna löppass (TrainingPeaks)
-  x.ef = x.easy && x.speed > 0 && x.avgHR > 0 ? (x.speed*60) / x.avgHR : null;
+  // Garmins egna värden sparas, så att pulskontrollen alltid utgår från dem
+  x.g = { zones, avgHR: x.avgHR, maxHR: x.maxHR };
+  deriveHr(x, zones);
   return x;
 }
 
