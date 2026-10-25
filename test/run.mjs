@@ -181,4 +181,35 @@ const st2 = JSON.parse((await check("status efter allt", "/api/status", good, en
 lr = await worker.fetch(req("/api/fit/1001", good), envDb); assert.equal(lr.status, 200); assert.equal((await lr.arrayBuffer()).byteLength, 5000);
 console.log("fit".padEnd(22), lr.status);
 
+// ---------- Egna poster: pulskontroll, besvär, förslag ----------
+lr = await post("/api/items/issue/b1", { id: "b1", area: "kna", side: "h", r: [{ d: "2026-10-20", w: "efter", l: 1 }] }, "PUT"); assert.equal(lr.status, 200);
+lr = await post("/api/items/issue/b1", { id: "b1", area: "kna", side: "h", r: [{ d: "2026-10-20", w: "efter", l: 1 }, { d: "2026-10-21", w: "dagen", l: 3 }] }, "PUT"); assert.equal(lr.status, 200);
+lr = await post("/api/items/hrcheck/1001", { v: 1, act: 3600, h0: 100, h: [5, 6] }, "PUT"); assert.equal(lr.status, 200);
+lr = await worker.fetch(req("/api/items/issue", good), envDb); const ij = await lr.json(); console.log("besvär".padEnd(22), JSON.stringify(ij).slice(0, 90));
+assert.equal(Object.keys(ij.items).length, 1); assert.equal(ij.items.b1.r.length, 2);
+lr = await post("/api/items/issue/../x", { a: 1 }, "PUT"); assert.notEqual(lr.status, 200);
+lr = await post("/api/items/nope/x", { a: 1 }, "PUT"); assert.notEqual(lr.status, 200, "okänd sort");
+lr = await post("/api/items/issue/b2", [1, 2], "PUT"); assert.equal(lr.status, 400, "inte ett objekt");
+lr = await post("/api/items/issue/b2", { a: 1 }, "PUT", "https://evil.example"); assert.equal(lr.status, 403);
+lr = await post("/api/items/hrcheck/x", { big: "x".repeat(20000) }, "PUT"); assert.equal(lr.status, 413);
+lr = await post("/api/items/issue/b1", null, "DELETE"); assert.equal(lr.status, 200);
+lr = await worker.fetch(req("/api/items/issue", good), envDb); assert.equal(Object.keys((await lr.json()).items).length, 0);
+const st3 = JSON.parse((await check("status poster", "/api/status", good, envDb)).body); assert.equal(st3.storage.items.hrcheck, 1);
+
+// Passförslag: Claude får kategorierna som enum och inga Persist-pass
+globalThis.fetch = async (url, opt={}) => {
+  if(String(url).startsWith("https://api.anthropic.com/")){
+    const b = JSON.parse(opt.body); assert.equal(b.tool_choice.name, "foreslag_struktur");
+    assert.deepEqual(b.tools[0].input_schema.properties.filter.properties.kategorier.items.enum, ["Styrka", "Metcon"]);
+    assert.ok(b.system.includes("Hitta inte på")); assert.ok(b.messages[0].content.includes("Vila"));
+    return new Response(JSON.stringify({ model: "claude-x", content: [{ type: "tool_use", name: "foreslag_struktur", input: { rubrik: "Lätt överkropp", bedomning: "passar med anpassning", varfor: "x", intensitet: "lätt", struktur: [], filter: { kategorier: ["Styrka"], fokus_undvik: ["ben"], fokus_helst: [] }, undvik: [] } }] }));
+  }
+  return realFetch(url, opt);
+};
+lr = await post("/api/suggest", { request: { typ: "CrossFit" }, categories: ["Styrka", "Metcon"], context: { niva: "Vila" } });
+assert.equal(lr.status, 400, "utan nyckel");
+lr = await worker.fetch(req2("/api/suggest", "POST", "https://x.workers.dev", JSON.stringify({ request: { typ: "CrossFit" }, categories: ["Styrka", "Metcon"], context: { niva: "Vila" } })), { ...envDb, ANTHROPIC_API_KEY: "sk-test" });
+const sg = await lr.json(); console.log("passförslag".padEnd(22), lr.status, JSON.stringify(sg).slice(0, 80)); assert.equal(sg.suggestion.filter.fokus_undvik[0], "ben");
+globalThis.fetch = realFetch;
+
 console.log("\nAlla tester gick igenom.");
