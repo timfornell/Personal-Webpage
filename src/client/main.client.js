@@ -46,9 +46,10 @@ let rT; window.addEventListener("resize", () => { clearTimeout(rT); rT = setTime
       else if(CFG.updated) saveCfg();      // inställningar gjorda innan databasen fanns
     }catch(e){}
   }
-  const extras = Promise.all([loadDaily(62, false), S.storage.db ? loadLogs() : Promise.resolve()]);
+  const extras = Promise.all([loadDaily(62, false), S.storage.db ? loadLogs() : Promise.resolve(), issuesLoad(), suggLoad()]);
   await load(365);
   await extras;
   invalidate();
   rerender();
+  hrqInit();
 })();

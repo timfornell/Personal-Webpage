@@ -216,8 +216,9 @@ function renderData(){
   $("#hr-max").placeholder = mx.v && mx.src !== "inställt" ? num(mx.v) + " (" + mx.src + ")" : "t.ex. 190";
   $("#hr-rest").placeholder = rs.v && rs.src !== "inställt" ? num(rs.v) + " (" + rs.src + ")" : "t.ex. 50";
   $("#hr-max").value = CFG.hr.max || ""; $("#hr-rest").value = CFG.hr.rest || "";
+  renderHrqBox();
   // Claude
-  $("#claude-note").innerHTML = S.claude ? "Claude läser skärmdumpar. Nyckeln finns i Cloudflare." : "Lägg in <b>ANTHROPIC_API_KEY</b> som Secret i Cloudflare (Settings → Variables and Secrets) för att läsa CrossFit-pass från skärmdumpar. Nyckeln skapas på console.anthropic.com och betalas per anrop, separat från ett Claude-abonnemang. Utan nyckel går pass att logga för hand.";
+  $("#claude-note").innerHTML = S.claude ? "Claude läser skärmdumpar och ger passförslag. Nyckeln finns i Cloudflare." : "Lägg in <b>ANTHROPIC_API_KEY</b> som Secret i Cloudflare (Settings → Variables and Secrets) för att läsa CrossFit-pass från skärmdumpar och få passförslag. Nyckeln skapas på console.anthropic.com och betalas per anrop, separat från ett Claude-abonnemang. Utan nyckel går pass att logga för hand, och dagens plan fungerar som vanligt.";
   // Persist
   $("#persist-note").textContent = !st.db ? "Kräver databasen." : st.persist ? st.persist + " Persist-pass importerade. Förslagen på Översikt hämtas från de valda spåren." : "Inget Persist-arkiv importerat. Välj filen persist-katalog.json.";
   $("#persist-file").disabled = !st.db;
@@ -243,7 +244,7 @@ $("#load3").onclick = () => load(1095);
 ["#hr-max", "#hr-rest"].forEach(sel => $(sel).onchange = () => {
   const v = parseInt($(sel).value, 10);
   CFG.hr[sel === "#hr-max" ? "max" : "rest"] = v > 20 && v < 260 ? v : undefined;
-  saveCfg(); invalidate(); toast("Sparat");
+  saveCfg(); invalidate(); renderData(); toast("Sparat");
 });
 $("#persist-file").onchange = e => { const f = e.target.files && e.target.files[0]; if(f) importPersist(f, $("#persist-status")); e.target.value = ""; };
 $("#cfg-json").onclick = openJsonEditor;
