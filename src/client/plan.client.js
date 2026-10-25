@@ -150,8 +150,12 @@ CARDS.today = { title: "I dag", tabs: ["oversikt"], render(b){
   if(ask) h += '<h3 class="h3">Vad tog ' + esc(ask.name) + ' ' + esc(relDay(ask.date)) + '?</h3>' + muscHtml(ask);
   h += '<h3 class="h3">Pass från Persist</h3><div class="sugg"></div>';
   if(S.claude){
-    const last = S.sugg.find(x => x.d === dayKey(new Date()));
-    h += '<div class="btnrow" style="margin-top:8px"><button class="btn small" data-sugg="ask">Föreslå ett pass med Claude</button>' + (last ? '<button class="btn ghost small" data-sugg="' + last.id + '">Dagens förslag: ' + esc(last.res.rubrik || "") + '</button>' : '') + '</div>';
+    const last = todaySugg();
+    if(last){
+      const r = last.res || {}, f = last.mine || r.filter || {};
+      h += '<div class="sgsum"><span class="sub">Claude föreslår</span><b>' + esc(r.rubrik || "") + '</b><span class="sub">' + esc(suggFacts(r, f).join(" · ")) + '</span></div>' +
+        '<div class="btnrow" style="margin-top:8px"><button class="btn small" data-sugg="' + last.id + '">Visa förslaget och passen</button></div>';
+    } else h += '<div class="btnrow" style="margin-top:8px"><button class="btn small" data-sugg="ask">Fråga Claude om dagens pass</button></div>';
   }
   if(R.rec) h += '<div class="sub" style="margin-top:8px">Pulsbaserad vilotid efter <b>' + esc(R.rec.x.name) + '</b>: ' + R.rec.h + ' h (' + esc(R.rec.method) + '). ' + (R.rec.left > 0 ? 'Klar om cirka ' + num(R.rec.left) + ' h.' : 'Redan klar.') + '</div>';
   h += '<details class="how"><summary>Mätvärdena bakom</summary><ul class="why">' + R.why.map(w => '<li><span class="dot" style="background:' + (w.sev === 2 ? "var(--bad)" : w.sev === 1 ? "var(--warn)" : "var(--good)") + '"></span>' + esc(w.txt) + '</li>').join("") + '</ul></details>';
@@ -231,10 +235,10 @@ async function suggLoad(){
   if(!S.storage.db) return;
   try{
     const j = await api("/api/items/suggest");
-    const all = Object.values(j.items || {}).filter(x => x && x.at);
-    // Förslag äldre än 30 dagar tas bort
-    all.filter(x => Date.now() - x.at > 30*DAY).forEach(x => api("/api/items/suggest/" + encodeURIComponent(x.id), { method: "DELETE" }).catch(() => {}));
-    S.sugg = all.filter(x => Date.now() - x.at <= 30*DAY).sort((a, b) => b.at - a.at);
+    const all = Object.values(j.items || {}).filter(x => x && x.at), today = dayKey(new Date());
+    // Förslag gäller bara den dag de gjordes. Äldre tas bort.
+    all.filter(x => x.d !== today).forEach(x => api("/api/items/suggest/" + encodeURIComponent(x.id), { method: "DELETE" }).catch(() => {}));
+    S.sugg = all.filter(x => x.d === today).sort((a, b) => b.at - a.at);
   }catch(e){}
 }
 function suggContext(){
@@ -263,21 +267,28 @@ function suggContext(){
   };
 }
 function segHtml(id, opts, v){ return '<div class="seg" id="' + id + '">' + opts.map(o => '<button data-v="' + o[0] + '" aria-pressed="' + (String(o[0]) === String(v)) + '">' + o[1] + '</button>').join("") + '</div>'; }
-// Claude väljer typ, ansträngning och längd själv. Önskemål är valfria och ligger under en egen rubrik.
+const todaySugg = () => S.sugg.find(x => x.d === dayKey(new Date())) || null;
+// Det Claude föreslog, i ord: ansträngning, längd, passtyper och fokus
+function suggFacts(r, f){
+  return [r.intensitet ? "ansträngning " + r.intensitet : "", f.langd_min || f.langd_max ? (f.langd_min || "?") + "–" + (f.langd_max || "?") + " min" : "", (f.kategorier || []).join(", "),
+    (f.fokus_undvik || []).length ? "inte fokus på " + regionText(f.fokus_undvik) : "", (f.fokus_helst || []).length ? "gärna fokus på " + regionText(f.fokus_helst) : "", r.puls || ""].filter(Boolean);
+}
+// Claude väljer typ, ansträngning och längd själv. Dagens förslag sparas och visas utan ny fråga.
+// Önskemål och Uppdatera skickar en ny fråga.
 function openSuggest(showId, run){
   openSheet("Passförslag");
   const pick = { typ: "", insats: "", tid: "" };
-  const recent = S.sugg.filter(x => Date.now() - x.at < 7*DAY);
+  const existing = showId ? S.sugg.find(x => x.id === showId) : (run ? todaySugg() : null);
   $("#sheet-body").innerHTML = '<div id="sg-out"></div>' +
-    '<section class="card"><details class="how" id="sg-wish"' + (run || showId ? '' : ' open') + '><summary>Önskemål, om du har några</summary><div class="form" style="margin-top:8px">' +
+    '<section class="card"><details class="how" id="sg-wish"><summary>Önskemål till nästa fråga</summary><div class="form" style="margin-top:8px">' +
     '<label>Typ</label>' + segHtml("sg-typ", SUG_TYPES, pick.typ) + '<label>Ansträngning</label>' + segHtml("sg-ins", SUG_EFFORT, pick.insats) + '<label>Tid du har</label>' + segHtml("sg-tid", SUG_TIME, pick.tid) +
     '<label>Annat<input id="sg-txt" placeholder="t.ex. bara kettlebells, inget löpande"></label></div></details>' +
-    '<div class="btnrow" style="margin-top:10px"><button class="btn" id="sg-go">' + (run || showId ? 'Fråga igen' : 'Fråga Claude') + '</button></div><p class="sub" style="margin:8px 0 0">Claude får en sammanfattning av dagens läge, veckans pass, vilka muskelgrupper de tog och dina besvär, och väljer själv typ, ansträngning och längd om du inte anger något. Inga pass ur arkivet skickas. Varje fråga kostar någon krona på din API-nyckel.</p></section>' +
-    (recent.length ? '<section class="card"><h2>Senaste förslagen</h2><div class="btnrow">' + recent.map(x => '<button class="btn ghost small" data-sugg="' + x.id + '">' + esc(dateTxt(new Date(x.at))) + ' · ' + esc(x.res.rubrik || "") + '</button>').join("") + '</div></section>' : '');
+    '<div class="btnrow" style="margin-top:10px"><button class="btn" id="sg-go">' + (existing ? 'Uppdatera förslaget' : 'Fråga Claude') + '</button></div><p class="sub" style="margin:8px 0 0">Claude får en sammanfattning av dagens läge, veckans pass, vilka muskelgrupper de tog och dina besvär, och väljer själv typ, ansträngning och längd om du inte anger något. Inga pass ur arkivet skickas. Dagens förslag sparas tills i morgon, så en ny fråga behövs bara om du vill uppdatera. Varje fråga kostar någon krona på din API-nyckel.</p></section>';
   ["typ","ins","tid"].forEach(k => { const el = $("#sg-" + k); el.onclick = e => { const b = e.target.closest("button"); if(!b) return; el.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); pick[k === "ins" ? "insats" : k] = b.dataset.v; }; });
   $("#sg-go").onclick = () => askClaude(pick);
-  if(showId){ const it = S.sugg.find(x => x.id === showId); if(it) renderSuggestion(it, $("#sg-out")); }
+  if(existing) renderSuggestion(existing, $("#sg-out"));
   else if(run) askClaude(pick);
+  else $("#sg-wish").open = true;
 }
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-sugg]"); if(!b) return;
@@ -285,15 +296,18 @@ document.addEventListener("click", e => {
   const v = b.dataset.sugg;
   if(v === "ask") openSuggest(null, true); else if(v === "new") openSuggest(); else openSuggest(v);
 });
+async function persistCats(){
+  if(S.persistCats) return S.persistCats;
+  if(!S.storage.db || !S.storage.persist) return [];
+  const t = await api("/api/persist/tracks"), chosen = CFG.persistTracks || [];
+  S.persistCats = [...new Set((t.tracks || []).filter(x => !chosen.length || chosen.includes(x.track)).map(x => x.pt).filter(Boolean))];
+  return S.persistCats;
+}
 async function askClaude(pick){
   const out = $("#sg-out"), btn = $("#sg-go");
   btn.disabled = true; out.innerHTML = '<section class="card"><div class="note"><span class="spin"></span>Claude tänker …</div></section>';
   try{
-    let cats = [];
-    if(S.storage.db && S.storage.persist){
-      const t = await api("/api/persist/tracks"), chosen = CFG.persistTracks || [];
-      cats = [...new Set((t.tracks || []).filter(x => !chosen.length || chosen.includes(x.track)).map(x => x.pt).filter(Boolean))];
-    }
+    const cats = await persistCats();
     const lbl = (list, v) => (list.find(t => t[0] === v) || [0, v])[1];
     const choose = "välj själv utifrån underlaget och säg i varfor vad du valde och varför";
     const request = {
@@ -304,41 +318,71 @@ async function askClaude(pick){
     };
     const j = await api("/api/suggest", { method: "POST", body: { request, categories: cats, context: suggContext() } });
     const item = { id: "s" + Date.now().toString(36), at: Date.now(), d: dayKey(new Date()), req: { typ: pick.typ ? request.typ : "", anstrangning: pick.insats ? request.anstrangning : "", tid_min: pick.tid ? request.tid_min : null }, res: j.suggestion, model: j.model };
-    S.sugg.unshift(item);
+    // Ett förslag per dag: det nya ersätter dagens tidigare
+    S.sugg.filter(x => x.d === item.d).forEach(x => { if(S.storage.db) api("/api/items/suggest/" + encodeURIComponent(x.id), { method: "DELETE" }).catch(() => {}); });
+    S.sugg = [item].concat(S.sugg.filter(x => x.d !== item.d));
     if(S.storage.db) api("/api/items/suggest/" + item.id, { method: "PUT", body: item }).catch(() => {});
     S.sheetDirty = true;
     renderSuggestion(item, out);
     if($("#sg-wish")) $("#sg-wish").open = false;
-    btn.textContent = "Fråga igen";
+    btn.textContent = "Uppdatera förslaget";
   }catch(e){ out.innerHTML = '<div class="banner">' + esc(e.message) + '</div>'; }
   btn.disabled = false;
 }
+const LEN_OPTS = [["", "Alla"], ["0-20", "upp till 20"], ["20-30", "20–30"], ["30-45", "30–45"], ["45-60", "45–60"], ["60-999", "över 60"]];
 async function renderSuggestion(item, el){
-  const r = item.res || {}, f = r.filter || {};
+  const r = item.res || {}, cf = r.filter || {};
   const asked = [item.req.typ, item.req.anstrangning && item.req.anstrangning.toLowerCase(), item.req.tid_min ? item.req.tid_min + " min" : ""].filter(x => x && !/välj/.test(x));
   let h = '<section class="card"><h2>' + esc(r.rubrik || "Förslag") + ' <small>' + esc(asked.length ? "du bad om " + asked.join(", ") : "Claude valde") + '</small></h2>';
-  h += '<div class="verdict"><span class="pill ' + (SUG_VERDICT[r.bedomning] || "") + '">' + esc(r.bedomning || "") + '</span><span class="sub">' + esc([r.intensitet, f.langd_min || f.langd_max ? (f.langd_min || "?") + "–" + (f.langd_max || "?") + " min" : "", r.puls].filter(Boolean).join(" · ")) + '</span></div>';
-  if(r.varfor) h += '<p style="margin:0 0 8px">' + esc(r.varfor) + '</p>';
+  h += '<div class="verdict"><span class="pill ' + (SUG_VERDICT[r.bedomning] || "") + '">' + esc(r.bedomning || "") + '</span></div>';
+  h += '<div class="sgsum"><span class="sub">Claude föreslår</span><b>' + esc(suggFacts(r, cf).join(" · ")) + '</b></div>';
+  if(r.varfor) h += '<p style="margin:8px 0">' + esc(r.varfor) + '</p>';
   if((r.struktur || []).length) h += '<h3 class="h3">Struktur</h3><ul class="pl">' + r.struktur.map(s => '<li class="pi do"><span class="pm">✓</span><span><b>' + esc(s.del) + '</b><span class="sub">' + esc(s.innehall) + '</span></span></li>').join("") + '</ul>';
   if((r.undvik || []).length) h += '<h3 class="h3">Undvik</h3><ul class="pl">' + r.undvik.map(t => '<li class="pi avoid"><span class="pm">✕</span><span><b>' + esc(t) + '</b></span></li>').join("") + '</ul>';
-  const ftxt = [(f.kategorier || []).length ? f.kategorier.join(", ") : null, f.langd_min || f.langd_max ? (f.langd_min || "?") + "–" + (f.langd_max || "?") + " min" : null, (f.fokus_undvik || []).length ? "inte fokus på " + regionText(f.fokus_undvik) : null, (f.fokus_helst || []).length ? "gärna fokus på " + regionText(f.fokus_helst) : null].filter(Boolean).join(" · ");
-  h += '<h3 class="h3">Pass ur Persist</h3>' + (ftxt ? '<div class="sub" style="margin-bottom:6px">Filter: ' + esc(ftxt) + '</div>' : '') + '<div class="sg-list"><div class="note"><span class="spin"></span></div></div>';
-  h += '<p class="sub" style="margin:10px 0 0">' + esc(dateTxt(new Date(item.at))) + ' kl ' + pad(new Date(item.at).getHours()) + ':' + pad(new Date(item.at).getMinutes()) + (item.model ? ' · ' + esc(item.model) : '') + '. Claude såg bara sammanfattningen, inga pass ur arkivet.</p></section>';
+  h += '<h3 class="h3">Pass ur Persist</h3><div class="sg-filter"></div><div class="sg-list"><div class="note"><span class="spin"></span></div></div>';
+  h += '<p class="sub" style="margin:10px 0 0">Gjort ' + esc(dateTxt(new Date(item.at))) + ' kl ' + pad(new Date(item.at).getHours()) + ':' + pad(new Date(item.at).getMinutes()) + (item.model ? ' · ' + esc(item.model) : '') + '. Claude såg bara sammanfattningen, inga pass ur arkivet.</p></section>';
   el.innerHTML = h;
-  const box = el.querySelector(".sg-list");
-  if(!(f.kategorier || []).length){ box.innerHTML = '<div class="sub">Inget arkivpass behövs. Kör strukturen ovan.</div>'; return; }
+  const box = el.querySelector(".sg-list"), fbox = el.querySelector(".sg-filter");
   if(!S.storage.db || !S.storage.persist){ box.innerHTML = '<div class="sub">Importera Persist-arkivet under Data för att få pass här.</div>'; return; }
-  try{
-    const tracks = encodeURIComponent((CFG.persistTracks || []).join(","));
-    const j = await api("/api/persist/suggest?pt=" + encodeURIComponent(f.kategorier.join(",")) + "&track=" + tracks + "&limit=60");
-    const strict = issuePlan().strict, lo = f.langd_min || 0, hi = f.langd_max || 999;
-    let list = (j.sessions || []).filter(s => !s.dur || (s.dur[1] >= lo - 5 && s.dur[0] <= hi + 5)).filter(s => persistOk(s, f.fokus_undvik || [], strict));
-    const pref = f.fokus_helst || [];
-    list = list.map((s, i) => ({ s, i, p: pref.includes(persistFocus(s).focus) ? 0 : 1 })).sort((a, b) => a.p - b.p || a.i - b.i).map(o => o.s).slice(0, 6);
-    S.persistPick = list;
-    box.innerHTML = list.length ? '<div class="plist">' + list.map((s, i) => { const fo = persistFocus(s).focus; return '<button class="prow" data-persist="' + i + '"><b>' + esc(s.title || s.track) + (fo ? ' <span class="pill tiny">fokus ' + esc(REGIONS[fo]) + '</span>' : ' <span class="pill tiny">helkropp</span>') + '</b><span class="sub">' + esc(s.track) + (s.pt ? ' · ' + esc(s.pt) : '') + (s.dur ? ' · ' + s.dur.join("–") + ' min' : '') + '</span></button>'; }).join("") + '</div>'
-      : '<div class="sub">Inga pass i de valda spåren matchar filtret. Strukturen ovan går att köra som den är.</div>';
-  }catch(e){ box.innerHTML = '<div class="sub">Kunde inte hämta pass: ' + esc(e.message) + '</div>'; }
+  const cats = await persistCats().catch(() => []);
+  const drawFilter = () => {
+    const f = item.mine || cf, mine = !!item.mine;
+    const lenKey = f.langd_min || f.langd_max ? (f.langd_min || 0) + "-" + (f.langd_max || 999) : "";
+    const lenOpts = LEN_OPTS.some(o => o[0] === lenKey) ? LEN_OPTS : LEN_OPTS.concat([[lenKey, (f.langd_min || 0) + "–" + (f.langd_max || "") ]]);
+    const chips = (key, opts, sel) => '<div class="chips wrapchips" data-fk="' + key + '">' + opts.map(o => '<button class="chip" data-v="' + esc(o[0]) + '" aria-pressed="' + sel.includes(o[0]) + '">' + esc(o[1]) + ((key === "kategorier" ? (cf.kategorier || []) : key === "fokus_undvik" ? (cf.fokus_undvik || []) : (cf.fokus_helst || [])).includes(o[0]) ? ' <span class="cl">C</span>' : '') + '</button>').join("") + '</div>';
+    const regs = Object.keys(REGIONS).map(k => [k, REGIONS[k]]);
+    fbox.innerHTML = '<div class="sub" style="margin-bottom:6px">' + (mine ? 'Du har ändrat filtret. <button class="btn ghost small" id="sg-reset">Återställ till Claudes förslag</button>' : 'Filtret är Claudes förslag, märkt med C. Ändra fritt, passen nedan uppdateras direkt utan ny fråga.') + '</div>' +
+      '<label class="sub">Passtyper</label>' + chips("kategorier", cats.map(c => [c, c]), f.kategorier || []) +
+      '<label class="sub">Längd, minuter</label><div class="chips wrapchips" data-fk="langd">' + lenOpts.map(o => '<button class="chip" data-v="' + o[0] + '" aria-pressed="' + (o[0] === lenKey) + '">' + esc(o[1]) + (o[0] === ((cf.langd_min || cf.langd_max) ? (cf.langd_min || 0) + "-" + (cf.langd_max || 999) : "") ? ' <span class="cl">C</span>' : '') + '</button>').join("") + '</div>' +
+      '<label class="sub">Inte fokus på</label>' + chips("fokus_undvik", regs, f.fokus_undvik || []) +
+      '<label class="sub">Gärna fokus på</label>' + chips("fokus_helst", regs, f.fokus_helst || []);
+    fbox.querySelectorAll("[data-fk]").forEach(g => g.onclick = e => {
+      const b = e.target.closest("button"); if(!b) return;
+      const nf = JSON.parse(JSON.stringify(item.mine || cf)), k = g.dataset.fk, v = b.dataset.v;
+      if(k === "langd"){ const [lo, hi] = v ? v.split("-").map(Number) : [null, null]; nf.langd_min = lo || null; nf.langd_max = hi && hi < 999 ? hi : null; }
+      else { const set = new Set(nf[k] || []); set.has(v) ? set.delete(v) : set.add(v); nf[k] = [...set]; }
+      item.mine = nf; saveItem(); drawFilter(); drawList();
+    });
+    const rs = fbox.querySelector("#sg-reset"); if(rs) rs.onclick = () => { delete item.mine; saveItem(); drawFilter(); drawList(); };
+  };
+  const saveItem = () => { S.sheetDirty = true; if(S.storage.db) api("/api/items/suggest/" + item.id, { method: "PUT", body: item }).catch(() => {}); };
+  const drawList = async () => {
+    const f = item.mine || cf;
+    if(!(f.kategorier || []).length){ box.innerHTML = '<div class="sub">Inga passtyper valda. ' + (item.mine ? 'Välj en eller flera ovan.' : 'Claude tycker att strukturen ovan räcker, till exempel för löpning.') + '</div>'; return; }
+    box.innerHTML = '<div class="note"><span class="spin"></span></div>';
+    try{
+      const tracks = encodeURIComponent((CFG.persistTracks || []).join(","));
+      const j = await api("/api/persist/suggest?pt=" + encodeURIComponent(f.kategorier.join(",")) + "&track=" + tracks + "&limit=60");
+      const strict = issuePlan().strict, lo = f.langd_min || 0, hi = f.langd_max || 999;
+      let list = (j.sessions || []).filter(s => !s.dur || (s.dur[1] >= lo - 5 && s.dur[0] <= hi + 5)).filter(s => persistOk(s, f.fokus_undvik || [], strict));
+      const pref = f.fokus_helst || [];
+      list = list.map((s, i) => ({ s, i, p: pref.includes(persistFocus(s).focus) ? 0 : 1 })).sort((a, b) => a.p - b.p || a.i - b.i).map(o => o.s).slice(0, 8);
+      S.persistPick = list;
+      box.innerHTML = list.length ? '<div class="plist">' + list.map((s, i) => { const fo = persistFocus(s).focus; return '<button class="prow" data-persist="' + i + '"><b>' + esc(s.title || s.track) + (fo ? ' <span class="pill tiny">fokus ' + esc(REGIONS[fo]) + '</span>' : ' <span class="pill tiny">helkropp</span>') + '</b><span class="sub">' + esc(s.track) + (s.pt ? ' · ' + esc(s.pt) : '') + (s.dur ? ' · ' + s.dur.join("–") + ' min' : '') + '</span></button>'; }).join("") + '</div>'
+        : '<div class="sub">Inga pass i de valda spåren matchar filtret. Ändra det ovan, eller kör strukturen som den är.</div>';
+    }catch(e){ box.innerHTML = '<div class="sub">Kunde inte hämta pass: ' + esc(e.message) + '</div>'; }
+  };
+  drawFilter(); drawList();
 }
 
 // ---------- Muskelgrupper per pass, angivna av dig ----------
