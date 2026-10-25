@@ -1,10 +1,10 @@
 // ---------- Anpassning: kortlayout, egna kort, sparade vyer, inställningar ----------
 const BUILTIN = {
-  oversikt: ["today","kpis","recovery","form","weeks","strain","zones","heat","recent","bench"],
+  oversikt: ["today","besvar","kpis","recovery","form","weeks","strain","zones","heat","recent","bench"],
   trender: ["trimpw","hr","dur","pace","ef","hrpace","volume","dist","vo2","z45","bench","moves","bb","wd","recovery","form","strain","weeks","zones"],
 };
 const DEFAULT_ON = {
-  "oversikt": ["today","kpis","recovery","form","weeks","zones","heat","recent"],
+  "oversikt": ["today","besvar","kpis","recovery","form","weeks","zones","heat","recent"],
   "trender:all": ["trimpw","hr","dur","z45","dist","strain","moves","bench","wd"],
   "trender:run": ["pace","ef","hrpace","volume","dist","vo2","hr","trimpw"],
   "trender:hiit": ["trimpw","z45","hr","bench","moves","bb","dur"],
@@ -14,7 +14,7 @@ const DEFAULT_ON = {
 };
 function defaultCfg(){
   return {
-    v: 2, layouts: {}, cards: {}, profiles: {}, hr: {}, persistTracks: [],
+    v: 2, layouts: {}, cards: {}, profiles: {}, hr: {}, persistTracks: [], hrMarks: {}, mig: [],
     // Exemplen från dokumentet, som startpunkt. Ändra eller ta bort dem fritt.
     views: [
       { id: "v_hiit150", name: "Hårda HIIT-pass", conds: [{ field:"type", op:"eq", value:"g:hiit" }, { field:"avgHR", op:"gt", value:"150" }], sort: "date", charts: ["avgHR","trimp"] },
@@ -27,6 +27,13 @@ function fixCfg(c){
   const d = defaultCfg();
   if(!c || typeof c !== "object") return d;
   for(const k of Object.keys(d)) if(c[k] == null || typeof c[k] !== typeof d[k] || Array.isArray(c[k]) !== Array.isArray(d[k])) c[k] = d[k];
+  // Nya kort som ska synas även i en layout du redan har ändrat, en gång
+  [["besvar", "today"]].forEach(([id, after]) => {
+    if(c.mig.includes(id)) return;
+    c.mig.push(id);
+    const L = c.layouts.oversikt;
+    if(Array.isArray(L) && !L.some(e => e.id === id)){ const k = L.findIndex(e => e.id === after); L.splice(k + 1, 0, { id, on: true }); }
+  });
   return c;
 }
 const scopeTab = scope => scope.split(":")[0];

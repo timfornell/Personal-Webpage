@@ -217,6 +217,30 @@ textarea{font:15px/1.4 var(--f-body); color:var(--ink); background:var(--surface
 .pm{width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; margin-top:1px}
 .pi.do .pm{background:color-mix(in srgb, var(--good) 18%, transparent); color:var(--good)}
 .pi.avoid .pm{background:color-mix(in srgb, var(--bad) 15%, transparent); color:var(--bad)}
+/* Besvär */
+.issue{padding:10px 0; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:6px}
+.issue:first-child{border-top:0; padding-top:2px}
+.ihead{display:flex; gap:8px; align-items:center; flex-wrap:wrap; border:0; background:none; padding:0; text-align:left; font:600 15px var(--f-body); color:var(--ink); cursor:pointer}
+.istrip{display:grid; grid-template-columns:repeat(21,1fr); gap:2px; max-width:340px}
+.istrip i{height:10px; border-radius:2px; background:var(--sunk)}
+.istrip i.l1{background:color-mix(in srgb, var(--good) 55%, transparent)} .istrip i.l2{background:var(--warn)} .istrip i.l3{background:color-mix(in srgb, var(--bad) 70%, transparent)} .istrip i.l4{background:var(--bad)}
+.qr{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+.qr .sub{flex:1 1 120px; min-width:0}
+.qb{display:flex; gap:4px}
+.lv{min-width:38px; height:34px; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:9px; font:600 14px var(--f-body); cursor:pointer; padding:0 8px}
+.lv[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+.lv.gone{color:var(--muted); font-weight:500}
+.lvls{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:6px}
+.lvb{display:flex; flex-direction:column; gap:2px; text-align:left; border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:10px; padding:8px 10px; font:14px var(--f-body); cursor:pointer}
+.lvb span{font-size:12px; color:var(--muted)}
+.lvb[aria-pressed="true"]{border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
+.lvb.l1 b{color:var(--good)} .lvb.l2 b{color:var(--warn)} .lvb.l3 b, .lvb.l4 b{color:var(--bad)}
+.wrapchips{flex-wrap:wrap; overflow:visible; margin-bottom:10px}
+.ilog{display:flex; flex-direction:column}
+.ilog .r{display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:14px}
+.ilog .r:first-child{border-top:0}
+.ilog .r:not(:has(button)){grid-template-columns:minmax(0,1fr) auto}
+details.card > summary{cursor:pointer; font-weight:600}
 </style>
 </head>
 <body>
@@ -275,11 +299,13 @@ textarea{font:15px/1.4 var(--f-body); color:var(--ink); background:var(--surface
   </section>
   <section class="card">
     <h2>Puls</h2>
-    <p class="sub" style="margin:0 0 8px">Används för Banister TRIMP. Lämna tomt för att använda värdet i grått.</p>
+    <p class="sub" style="margin:0 0 8px">Maxpulsen avgör vad som räknas som pulstopp och var zonerna går. Lämna tomt för att använda värdet i grått, men har du toppar som inte kommer från träningen är det säkrast att fylla i din riktiga maxpuls.</p>
     <div class="form hrrow"><label>Maxpuls<input id="hr-max" inputmode="numeric"></label><label>Vilopuls<input id="hr-rest" inputmode="numeric"></label></div>
+    <div id="hrq-box"></div>
+    <div id="hrq-scan"></div>
   </section>
   <section class="card">
-    <h2>Skärmdumpar</h2>
+    <h2>Claude</h2>
     <p class="sub" style="margin:0" id="claude-note"></p>
   </section>
   <section class="card">
