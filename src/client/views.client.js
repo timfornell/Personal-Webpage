@@ -1,5 +1,5 @@
 // ---------- Flikar och inbyggda kort ----------
-function invalidate(){ LOADC = null; CALC = {}; S._dmap = null; }
+function invalidate(){ LOADC = null; CALC = {}; S._dmap = null; HRMAXC = null; applyHrq(); }
 const RENDER = { oversikt: renderOverview, pass: renderPass, trender: renderTrends, data: renderData };
 function showTab(name){
   if(!RENDER[name]) name = "oversikt";
@@ -303,7 +303,7 @@ function rowHtml(x){
   const sub = x.avgHR ? Math.round(x.avgHR) + " bpm" : (x.kcal ? x.kcal + " kcal" : "");
   const lg = logFor(x);
   return '<button class="row" data-open="' + x.id + '"><span class="stripe" style="background:' + gColor(x.grp) + '"></span>' +
-    '<span style="min-width:0"><span class="name">' + esc(lg && lg.data.name ? lg.data.name : x.name) + (lg ? ' <span class="pill tiny">loggat</span>' : '') + '</span><span class="meta">' + esc(typeLabel(x.type)) + ' · ' + esc(dateTxt(x.date)) + ' ' + pad(x.date.getHours()) + ':' + pad(x.date.getMinutes()) + (x.dist ? ' · ' + hmShort(x.dur) : '') + '</span></span>' +
+    '<span style="min-width:0"><span class="name">' + esc(lg && lg.data.name ? lg.data.name : x.name) + (lg ? ' <span class="pill tiny">loggat</span>' : '') + ' ' + hrqPill(x, true) + '</span><span class="meta">' + esc(typeLabel(x.type)) + ' · ' + esc(dateTxt(x.date)) + ' ' + pad(x.date.getHours()) + ':' + pad(x.date.getMinutes()) + (x.dist ? ' · ' + hmShort(x.dur) : '') + '</span></span>' +
     '<span class="nums">' + esc(right) + '<small>' + esc(sub) + '</small></span>' + (x.zones ? zoneBar(x.zones, true) : '') + '</button>';
 }
 function currentView(){ return (CFG.views || []).find(v => v.id === S.view) || null; }
@@ -396,9 +396,12 @@ function openSession(id){
   const rec = recoveryHours(x);
   let html = '<div class="sub">' + esc(typeLabel(x.type)) + ' · ' + esc(dateTxt(x.date, true)) + ' kl ' + pad(x.date.getHours()) + ':' + pad(x.date.getMinutes()) + '</div>';
   html += '<div class="metrics" id="mgrid">' + metricGrid(x) + '</div><div class="btnrow"><button class="btn ghost small" id="prof-btn">Välj mått för ' + esc(GROUP_NAME[x.grp]) + '</button></div><div id="prof-edit"></div>';
-  if(x.zp != null) html += '<div class="sub">Belastning (TRIMP) ' + num(x.zp) + ': varje minut i pulszon 1–5 räknas som 1–5 poäng, så 10 minuter i zon 4 ger 40.' + (rec ? ' Passet är ' + num(rec.r*100) + ' % av ditt vanliga pass i gruppen ' + esc(GROUP_NAME[x.grp]) + ', vilket ger cirka ' + rec.h + ' h vilotid (' + esc(rec.method) + ').' : '') + '</div>';
+  if(x.zp != null) html += '<div class="sub">Belastning (TRIMP) ' + num(x.zp) + (x.zpEst ? ', uppskattad eftersom pulsen är opålitlig.' : ': varje minut i pulszon 1–5 räknas som 1–5 poäng, så 10 minuter i zon 4 ger 40.') + (rec ? ' Passet är ' + num(rec.r*100) + ' % av ditt vanliga pass i gruppen ' + esc(GROUP_NAME[x.grp]) + ', vilket ger cirka ' + rec.h + ' h vilotid (' + esc(rec.method) + ').' : '') + '</div>';
 
+  const hq = hrqCardHtml(x);
+  if(hq && x.hrq.state !== "ok") html += '<section class="card" id="hrqcard">' + hq + '</section>';
   html += '<section class="card" id="logcard"></section>';
+  html += '<section class="card" id="issuecard"></section>';
 
   if(x.zones){
     const t = x.zt, mx = Math.max(...x.zones);
@@ -429,6 +432,7 @@ function openSession(id){
   $("#sheet-body").innerHTML = html;
   $("#prof-btn").onclick = () => toggleProfileEditor(x);
   renderLogCard(x);
+  renderIssueCard(x);
   loadDetails(x);
   loadFitCard(x);
 }
@@ -446,26 +450,50 @@ function toggleProfileEditor(x){
 async function loadFitCard(x){
   const el = () => S.openId === x.id ? $("#fitcard") : null;
   try{
-    const recs = await loadFit(x.id);
+    const raw = await loadFit(x.id);
     if(!el()) return;
-    const hr = recs.filter(r => r.hr);
-    if(hr.length < 10){ el().innerHTML = '<h2>Puls över tid</h2>' + note("Filen innehåller ingen puls."); return; }
     const rest = hrRest(), max = hrMax();
-    const ban = banister(recs, rest.v, max.v);
-    const dec = x.grp === "run" ? decoupling(recs) : null;
-    let h = '<h2>Puls över tid</h2><div class="chart" id="ch-fit"></div><div class="metrics" style="margin-top:10px">';
+    // Pulskontrollen: spara analysen om den saknas, och markera störningar i diagrammet
+    const A = analyzeFit(raw, max.v, rest.v);
+    if(hrqNeeds(x, max.v) || !HRQ.items[x.id] || HRQ.items[x.id].err){
+      const before = x.hrq && x.hrq.state;
+      await hrqSave(x.id, A.item); invalidate(); S.sheetDirty = true;
+      if(x.hrq && x.hrq.state !== before && S.openId === x.id){ openSession(x.id); return; }
+    }
+    const lim = max.v ? max.v + HRQ_RULES.over : Infinity;
+    const trust = x.hrq && x.hrq.mark === "ok";
+    const bad = (r, i) => !r.hr || r.hr > lim || (!trust && A.flag[i] > 0);
+    const recs = A.recs.map((r, i) => bad(r, i) ? Object.assign({}, r, { hr: null }) : r);
+    const hr = A.recs.filter(r => r.hr);
+    if(hr.length < 10){ el().innerHTML = '<h2>Puls över tid</h2>' + note("Filen innehåller ingen puls.") + hrqFoot(x); return; }
+    const ban = x.hrq && x.hrq.state === "opalitlig" ? null : banister(recs, rest.v, max.v);
+    const dec = x.grp === "run" && x.hrOk !== false ? decoupling(recs) : null;
+    const good = recs.filter(r => r.hr);
+    let h = '<h2>Puls över tid</h2><div class="chart" id="ch-fit"></div>';
+    const nBad = A.recs.filter((r, i) => r.hr && bad(r, i)).length;
+    if(nBad) h += legend([["var(--bad)","puls"],["var(--muted)","störning, räknas inte"]]);
+    h += '<div class="metrics" style="margin-top:10px">';
     if(ban != null) h += '<div class="metric"><b>' + num(ban) + '</b><span>Banister TRIMP</span></div>';
     if(dec) h += '<div class="metric"><b>' + num(dec.pct, 1) + ' %</b><span>Aerob avkoppling</span></div>';
-    h += '<div class="metric"><b>' + num(Math.max(...hr.map(r => r.hr))) + '</b><span>Maxpuls i filen</span></div></div>';
+    const cleanMax = good.length ? Math.max(...good.map(r => r.hr)) : null, rawMax = Math.max(...hr.map(r => r.hr));
+    h += '<div class="metric"><b>' + num(cleanMax) + '</b><span>Maxpuls' + (rawMax > (cleanMax || 0) ? ' utan störningar, ' + num(rawMax) + ' i filen' : ' i filen') + '</span></div></div>';
     h += '<div class="sub" style="margin-top:8px">' + (ban != null ? 'Banister TRIMP med vilopuls ' + num(rest.v) + ' (' + esc(rest.src) + ') och maxpuls ' + num(max.v) + ' (' + esc(max.src) + '), koefficienter för män. ' : 'Banister TRIMP behöver vilo- och maxpuls, se Data-fliken. ') +
       (dec ? 'Avkoppling: fart per puls sjönk ' + num(dec.pct, 1) + ' % från första till andra halvan. Under 5 % räknas som god uthållighet, och måttet gäller jämna pass.' + (x.z45 > 0.2 ? ' Det här passet hade mycket tid i zon 4–5, så värdet säger mindre.' : '') : x.grp === "run" ? 'Avkoppling kräver minst 20 minuter med fart och puls.' : '') + '</div>';
+    h += hrqFoot(x);
     el().innerHTML = h;
-    const t0 = hr[0].t, step = Math.max(1, Math.floor(hr.length/400));
-    const pts = hr.filter((_, i) => i % step === 0).map(r => ({ x: new Date(r.t), y: r.hr }));
-    multiLine($("#ch-fit"), [{ color:"var(--bad)", pts, gap: 120000 }], { h: 140, fmt: v => num(v), xfmt: t => Math.round((t - t0)/60000) + " min" });
-    const mins = Math.round((hr[hr.length-1].t - t0)/60000);
-    $("#ch-fit").insertAdjacentHTML("afterend", '<div class="readout">' + mins + ' minuter med puls.</div>');
-  }catch(e){ if(el()) el().innerHTML = '<h2>Puls över tid</h2>' + note("Kunde inte läsa originalfilen: " + esc(e.message)); }
+    const t0 = hr[0].t, step = Math.max(1, Math.floor(A.recs.length/500));
+    const okPts = [], badPts = [];
+    A.recs.forEach((r, i) => { if(!r.hr || i % step) return; (bad(r, i) ? badPts : okPts).push({ x: new Date(r.t), y: r.hr }); });
+    const gap = Math.max(15000, 3*step*((A.recs[A.recs.length-1].t - t0)/A.recs.length));
+    multiLine($("#ch-fit"), [{ color:"var(--muted)", pts: badPts, gap }, { color:"var(--bad)", pts: okPts, gap }], { h: 140, fmt: v => num(v), xfmt: t => Math.round((t - t0)/60000) + " min" });
+    const it = A.item;
+    const parts = [["utan puls", it.miss], ["plötsliga fall", it.drop], ["låg puls i rörelse", it.low], ["plötsliga toppar", it.jump]].filter(p => p[1] >= 10).map(p => hm(p[1]) + " " + p[0]);
+    $("#ch-fit").insertAdjacentHTML("afterend", '<div class="readout">' + Math.round(it.act/60) + ' minuter i filen' + (parts.length ? ', varav ' + listJoin(parts) : '') + '.</div>');
+  }catch(e){ if(el()) el().innerHTML = '<h2>Puls över tid</h2>' + note("Kunde inte läsa originalfilen: " + esc(e.message)) + hrqFoot(x); }
+}
+// Knapp för att markera ett pass där sidan inte hittat något fel
+function hrqFoot(x){
+  return x.hrq && x.hrq.state === "ok" && !x.hrq.mark ? '<div class="btnrow" style="margin-top:8px"><button class="btn ghost small" data-hrmark="bad">Markera pulsen som opålitlig</button></div>' : "";
 }
 
 async function loadDetails(x){
