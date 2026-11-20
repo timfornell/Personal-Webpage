@@ -216,6 +216,7 @@ globalThis.fetch = async (url, opt={}) => {
   if(String(url).startsWith("https://api.anthropic.com/")){
     const b = JSON.parse(opt.body);
     assert.ok(!b.tools, "inga verktyg"); assert.ok(b.system.includes("Hitta inte på")); assert.ok(b.system.includes("hojd_m"));
+    assert.ok(b.max_tokens >= 8000, "utrymme för tänkande och svar"); assert.equal(b.output_config.effort, "medium");
     assert.equal(b.messages[0].role, "user"); assert.ok(b.messages[0].content[0].text.startsWith("Underlag:"));
     assert.ok(b.messages[0].content[0].text.includes('"puls"')); assert.equal(b.messages[0].content[0].cache_control.type, "ephemeral");
     assert.ok(b.messages[0].content[1].text.startsWith("Fråga: "));
@@ -239,6 +240,12 @@ let askTries = 0; const okFetch = globalThis.fetch;
 globalThis.fetch = async (url, opt={}) => { if(String(url).startsWith("https://api.anthropic.com/")){ askTries++; return new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }), { status: 529, headers: { "retry-after": "0" } }); } return okFetch(url, opt); };
 lr = await ask({ question: "Puls?", context: askCtx }); const oj = await lr.json();
 console.log("överbelastad".padEnd(22), lr.status, askTries, oj.error); assert.equal(lr.status, 503); assert.equal(askTries, 2);
+// Avklippt svar: texten kommer fram med en notis, bara tänkande ger ett tydligt fel
+globalThis.fetch = async (url, opt={}) => { if(String(url).startsWith("https://api.anthropic.com/")) return new Response(JSON.stringify({ model: "claude-x", stop_reason: "max_tokens", content: [{ type: "thinking", thinking: "", signature: "s" }, { type: "text", text: "Början av svaret" }] })); return okFetch(url, opt); };
+lr = await ask({ question: "Puls?", context: askCtx }); const cj = await lr.json(); assert.equal(lr.status, 200); assert.ok(cj.answer.startsWith("Början av svaret") && cj.answer.includes("avklippt"));
+globalThis.fetch = async (url, opt={}) => { if(String(url).startsWith("https://api.anthropic.com/")) return new Response(JSON.stringify({ model: "claude-x", stop_reason: "max_tokens", content: [{ type: "thinking", thinking: "", signature: "s" }] })); return okFetch(url, opt); };
+lr = await ask({ question: "Puls?", context: askCtx }); assert.equal(lr.status, 502); assert.ok((await lr.json()).error.includes("max_tokens"));
+console.log("avklippt svar".padEnd(22), "ok");
 globalThis.fetch = okFetch;
 lr = await ask({ question: "", context: askCtx }); assert.equal(lr.status, 400, "tom fråga");
 lr = await ask({ question: "x".repeat(1600), context: askCtx }); assert.equal(lr.status, 400, "för lång fråga");
