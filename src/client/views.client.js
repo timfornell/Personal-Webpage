@@ -410,6 +410,7 @@ function openSession(id){
       x.zones.map((v, i) => '<div class="zrow"><b>Z' + (i+1) + '</b><div class="t"><span style="width:' + (v/mx*100).toFixed(1) + '%;background:' + ZC[i] + '"></span></div><span class="v">' + clock(v) + ' · ' + num(v/t*100) + '%</span></div>').join("") + '</div></section>';
   }
   html += '<section class="card" id="fitcard"><h2>Puls över tid</h2><div class="note"><span class="spin"></span>Läser originalfilen från Garmin …</div></section>';
+  html += '<section class="card ask" id="askcard"></section>';
 
   const peers = S.all.filter(p => p.type === x.type && p.id !== x.id);
   if(peers.length >= 3){
@@ -435,6 +436,7 @@ function openSession(id){
   renderLogCard(x);
   renderIssueCard(x);
   renderMuscCard(x);
+  renderAskCard(x);
   loadDetails(x);
   loadFitCard(x);
 }
@@ -462,16 +464,15 @@ async function loadFitCard(x){
       await hrqSave(x.id, A.item); invalidate(); S.sheetDirty = true;
       if(x.hrq && x.hrq.state !== before && S.openId === x.id){ openSession(x.id); return; }
     }
-    const lim = max.v ? max.v + HRQ_RULES.over : Infinity;
-    const trust = x.hrq && x.hrq.mark === "ok";
-    const bad = (r, i) => !r.hr || r.hr > lim || (!trust && A.flag[i] > 0);
-    const recs = A.recs.map((r, i) => bad(r, i) ? Object.assign({}, r, { hr: null }) : r);
+    const { bad, recs } = fitClean(x, A, max.v);
     const hr = A.recs.filter(r => r.hr);
     if(hr.length < 10){ el().innerHTML = '<h2>Puls över tid</h2>' + note("Filen innehåller ingen puls.") + hrqFoot(x); return; }
     const ban = x.hrq && x.hrq.state === "opalitlig" ? null : banister(recs, rest.v, max.v);
     const dec = x.grp === "run" && x.hrOk !== false ? decoupling(recs) : null;
     const good = recs.filter(r => r.hr);
-    let h = '<h2>Puls över tid</h2><div class="chart" id="ch-fit"></div>';
+    const altPts = A.recs.filter(r => r.alt != null);
+    const hasAlt = altPts.length > 30 && Math.max(...altPts.map(r => r.alt)) - Math.min(...altPts.map(r => r.alt)) >= 3;
+    let h = '<h2>Puls över tid</h2><div class="chart" id="ch-fit"></div>' + (hasAlt ? '<div class="sub" style="margin-top:6px">Höjd</div><div class="chart" id="ch-alt"></div>' : '');
     const nBad = A.recs.filter((r, i) => r.hr && bad(r, i)).length;
     if(nBad) h += legend([["var(--bad)","puls"],["var(--muted)","störning, räknas inte"]]);
     h += '<div class="metrics" style="margin-top:10px">';
@@ -487,11 +488,24 @@ async function loadFitCard(x){
     const okPts = [], badPts = [];
     A.recs.forEach((r, i) => { if(!r.hr || i % step) return; (bad(r, i) ? badPts : okPts).push({ x: new Date(r.t), y: r.hr }); });
     const gap = Math.max(15000, 3*step*((A.recs[A.recs.length-1].t - t0)/A.recs.length));
-    multiLine($("#ch-fit"), [{ color:"var(--muted)", pts: badPts, gap }, { color:"var(--bad)", pts: okPts, gap }], { h: 140, fmt: v => num(v), xfmt: t => Math.round((t - t0)/60000) + " min" });
+    multiLine($("#ch-fit"), [{ color:"var(--muted)", pts: badPts, gap }, { color:"var(--bad)", pts: okPts, gap }], { h: 140, fmt: v => num(v), xfmt: t => Math.round((t - t0)/60000) + " min", from: t0 });
+    if(hasAlt){
+      const st = Math.max(1, Math.floor(altPts.length/500));
+      const ap = altPts.filter((r, i) => !(i % st)).map(r => ({ x: new Date(r.t), y: r.alt }));
+      multiLine($("#ch-alt"), [{ color:"var(--accent)", pts: ap, gap }], { h: 90, fmt: v => num(v) + " m", xfmt: t => Math.round((t - t0)/60000) + " min", from: t0 });
+    }
     const it = A.item;
     const parts = [["utan puls", it.miss], ["plötsliga fall", it.drop], ["låg puls i rörelse", it.low], ["plötsliga toppar", it.jump]].filter(p => p[1] >= 10).map(p => hm(p[1]) + " " + p[0]);
-    $("#ch-fit").insertAdjacentHTML("afterend", '<div class="readout">' + Math.round(it.act/60) + ' minuter i filen' + (parts.length ? ', varav ' + listJoin(parts) : '') + '.</div>');
+    $(hasAlt ? "#ch-alt" : "#ch-fit").insertAdjacentHTML("afterend", '<div class="readout">' + Math.round(it.act/60) + ' minuter i filen' + (parts.length ? ', varav ' + listJoin(parts) : '') + '.</div>');
   }catch(e){ if(el()) el().innerHTML = '<h2>Puls över tid</h2>' + note("Kunde inte läsa originalfilen: " + esc(e.message)) + hrqFoot(x); }
+}
+// Pulsen efter pulskontrollen: störningar och värden över maxpulsen blir null, resten av punkten behålls
+function fitClean(x, A, max){
+  const lim = max ? max + HRQ_RULES.over : Infinity;
+  const trust = x.hrq && x.hrq.mark === "ok";
+  const bad = (r, i) => !r.hr || r.hr > lim || (!trust && A.flag[i] > 0);
+  const recs = A.recs.map((r, i) => bad(r, i) ? Object.assign({}, r, { hr: null }) : r);
+  return { bad, recs };
 }
 // Knapp för att markera ett pass där sidan inte hittat något fel
 function hrqFoot(x){
