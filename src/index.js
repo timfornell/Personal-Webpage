@@ -636,33 +636,52 @@ async function askSession(env, body) {
   if (!q) throw new HttpError(400, "Frågan saknas");
   if (q.length > 1500) throw new HttpError(400, "Frågan är för lång");
   if (!body.context || typeof body.context !== "object" || Array.isArray(body.context)) throw new HttpError(400, "Underlaget saknas");
-  const hist = cleanHistory(body.history);
-  const underlag = "Underlag:\n" + JSON.stringify(body.context);
+  const hist = cleanHistory(body.history).filter(t => t.q.trim() && t.a.trim());
+  // Underlaget ligger först och är detsamma i hela samtalet, så det cachas hos Anthropic.
+  // Följdfrågor blir då billigare och räknas mindre mot gränsen för tokens per minut.
+  const first = qq => [
+    { type: "text", text: "Underlag:\n" + JSON.stringify(body.context), cache_control: { type: "ephemeral" } },
+    { type: "text", text: "Fråga: " + qq },
+  ];
   const messages = [];
   if (hist.length) {
     hist.forEach((t, i) => {
-      messages.push({ role: "user", content: (i === 0 ? underlag + "\n\nFråga: " : "") + t.q });
-      messages.push({ role: "assistant", content: t.a });
+      messages.push({ role: "user", content: i === 0 ? first(t.q) : t.q });
+      messages.push({ role: "assistant", content: t.a.trim() });
     });
     messages.push({ role: "user", content: q });
   } else {
-    messages.push({ role: "user", content: underlag + "\n\nFråga: " + q });
+    messages.push({ role: "user", content: first(q) });
   }
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const payload = JSON.stringify({
+    model: (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim(),
+    max_tokens: 1500,
+    system: ASK_SYSTEM,
+    messages,
+  });
+  const call = () => fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY.trim(), "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim(),
-      max_tokens: 1500,
-      system: ASK_SYSTEM,
-      messages,
-    }),
+    body: payload,
   });
+  let r = await call();
+  // Ett nytt försök om Claude är överbelastad eller gränsen per minut är nådd
+  if (r.status === 429 || r.status === 529 || r.status === 503) {
+    const wait = Math.min(15, Math.max(2, Number(r.headers.get("retry-after")) || 4));
+    await r.text().catch(() => {});
+    await new Promise(res => setTimeout(res, wait * 1000));
+    r = await call();
+  }
   const text = await r.text();
   let j = null; try { j = JSON.parse(text); } catch (e) {}
-  if (!r.ok) throw new HttpError(502, "Claude svarade HTTP " + r.status + ": " + ((j && j.error && j.error.message) || text.slice(0, 200)));
+  if (!r.ok) {
+    const msg = (j && j.error && j.error.message) || text.slice(0, 200);
+    if (r.status === 429) throw new HttpError(429, "Gränsen för hur mycket Claude får läsa per minut är nådd. Vänta en minut och skicka igen. (" + msg + ")");
+    if (r.status === 529 || r.status === 503) throw new HttpError(503, "Claude är överbelastad just nu. Försök igen om en stund.");
+    throw new HttpError(502, "Claude svarade HTTP " + r.status + ": " + msg);
+  }
   const answer = j && Array.isArray(j.content) ? j.content.filter(c => c.type === "text").map(c => c.text).join("\n").trim() : "";
-  if (!answer) throw new HttpError(502, "Claude gav inget svar");
+  if (!answer) throw new HttpError(502, "Claude gav inget svar" + (j && j.stop_reason ? " (" + j.stop_reason + ")" : ""));
   return { answer, model: j.model, usage: j.usage || null };
 }
 
