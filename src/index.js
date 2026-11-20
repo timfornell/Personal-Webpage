@@ -653,12 +653,12 @@ async function askSession(env, body) {
   } else {
     messages.push({ role: "user", content: first(q) });
   }
-  const payload = JSON.stringify({
-    model: (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim(),
-    max_tokens: 1500,
-    system: ASK_SYSTEM,
-    messages,
-  });
+  // Nyare modeller tänker först, och tänkandet räknas in i max_tokens. Med för lite utrymme
+  // tar tänkandet allt och inget svar blir kvar. Medelnivå räcker för frågor om ett pass och håller svarstiden nere.
+  const model = (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim();
+  const req = { model, max_tokens: 16000, system: ASK_SYSTEM, messages };
+  if (/^claude-(sonnet|opus|haiku|fable|mythos)-5/.test(model)) req.output_config = { effort: "medium" };
+  const payload = JSON.stringify(req);
   const call = () => fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY.trim(), "anthropic-version": "2023-06-01" },
@@ -682,7 +682,8 @@ async function askSession(env, body) {
   }
   const answer = j && Array.isArray(j.content) ? j.content.filter(c => c.type === "text").map(c => c.text).join("\n").trim() : "";
   if (!answer) throw new HttpError(502, "Claude gav inget svar" + (j && j.stop_reason ? " (" + j.stop_reason + ")" : ""));
-  return { answer, model: j.model, usage: j.usage || null };
+  const cut = j.stop_reason === "max_tokens" ? "\n\n*Svaret blev avklippt. Be om en kortare sammanfattning eller fråga om en del i taget.*" : "";
+  return { answer: answer + cut, model: j.model, usage: j.usage || null };
 }
 
 function logRow(r) {
