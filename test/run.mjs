@@ -216,8 +216,9 @@ globalThis.fetch = async (url, opt={}) => {
   if(String(url).startsWith("https://api.anthropic.com/")){
     const b = JSON.parse(opt.body);
     assert.ok(!b.tools, "inga verktyg"); assert.ok(b.system.includes("Hitta inte på")); assert.ok(b.system.includes("hojd_m"));
-    assert.equal(b.messages[0].role, "user"); assert.ok(b.messages[0].content.startsWith("Underlag:"));
-    assert.ok(b.messages[0].content.includes('"puls"'));
+    assert.equal(b.messages[0].role, "user"); assert.ok(b.messages[0].content[0].text.startsWith("Underlag:"));
+    assert.ok(b.messages[0].content[0].text.includes('"puls"')); assert.equal(b.messages[0].content[0].cache_control.type, "ephemeral");
+    assert.ok(b.messages[0].content[1].text.startsWith("Fråga: "));
     assert.equal(b.messages[b.messages.length-1].role, "user");
     if(b.messages.length > 1){ assert.equal(b.messages[1].role, "assistant"); assert.equal(b.messages[2].content, "Och sista km?"); }
     return new Response(JSON.stringify({ model: "claude-x", content: [{ type: "text", text: "Pulsen steg i backarna med cirka 40 s fördröjning." }] }));
@@ -232,6 +233,13 @@ const ask = body => worker.fetch(req2("/api/ask", "POST", "https://x.workers.dev
 lr = await ask({ question: "Puls mot höjd?", context: askCtx }); const aj = await lr.json();
 console.log("fråga om pass".padEnd(22), lr.status, JSON.stringify(aj).slice(0, 70)); assert.equal(lr.status, 200); assert.ok(aj.answer.includes("fördröjning"));
 lr = await ask({ question: "Och sista km?", context: askCtx, history: [{ q: "Puls mot höjd?", a: "Svar 1" }] }); assert.equal(lr.status, 200, "följdfråga");
+lr = await ask({ question: "Och sista km?", context: askCtx, history: [{ q: "Puls mot höjd?", a: "Svar 1" }, { q: "Tom", a: "  " }] }); assert.equal(lr.status, 200, "följdfråga med tomt svar i historiken");
+// Claude överbelastad: ett nytt försök, sedan ett tydligt fel
+let askTries = 0; const okFetch = globalThis.fetch;
+globalThis.fetch = async (url, opt={}) => { if(String(url).startsWith("https://api.anthropic.com/")){ askTries++; return new Response(JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }), { status: 529, headers: { "retry-after": "0" } }); } return okFetch(url, opt); };
+lr = await ask({ question: "Puls?", context: askCtx }); const oj = await lr.json();
+console.log("överbelastad".padEnd(22), lr.status, askTries, oj.error); assert.equal(lr.status, 503); assert.equal(askTries, 2);
+globalThis.fetch = okFetch;
 lr = await ask({ question: "", context: askCtx }); assert.equal(lr.status, 400, "tom fråga");
 lr = await ask({ question: "x".repeat(1600), context: askCtx }); assert.equal(lr.status, 400, "för lång fråga");
 lr = await ask({ question: "Hur gick det?" }); assert.equal(lr.status, 400, "utan underlag");
