@@ -210,6 +210,33 @@ lr = await post("/api/suggest", { request: { typ: "CrossFit" }, categories: ["St
 assert.equal(lr.status, 400, "utan nyckel");
 lr = await worker.fetch(req2("/api/suggest", "POST", "https://x.workers.dev", JSON.stringify({ request: { typ: "CrossFit" }, categories: ["Styrka", "Metcon"], context: { niva: "Vila" } })), { ...envDb, ANTHROPIC_API_KEY: "sk-test" });
 const sg = await lr.json(); console.log("passförslag".padEnd(22), lr.status, JSON.stringify(sg).slice(0, 80)); assert.equal(sg.suggestion.filter.fokus_undvik[0], "ben");
+
+// Frågor om ett pass: underlaget och tidigare svar skickas, svaret kommer tillbaka som text
+globalThis.fetch = async (url, opt={}) => {
+  if(String(url).startsWith("https://api.anthropic.com/")){
+    const b = JSON.parse(opt.body);
+    assert.ok(!b.tools, "inga verktyg"); assert.ok(b.system.includes("Hitta inte på")); assert.ok(b.system.includes("hojd_m"));
+    assert.equal(b.messages[0].role, "user"); assert.ok(b.messages[0].content.startsWith("Underlag:"));
+    assert.ok(b.messages[0].content.includes('"puls"'));
+    assert.equal(b.messages[b.messages.length-1].role, "user");
+    if(b.messages.length > 1){ assert.equal(b.messages[1].role, "assistant"); assert.equal(b.messages[2].content, "Och sista km?"); }
+    return new Response(JSON.stringify({ model: "claude-x", content: [{ type: "text", text: "Pulsen steg i backarna med cirka 40 s fördröjning." }] }));
+  }
+  return realFetch(url, opt);
+};
+const askCtx = { pass: { namn: "Löpning", tid_min: 42 }, tidsserie: { steg_sek: 10, kolumner: ["sek", "puls", "hojd_m"], rader: [[0, 120, 30], [10, 128, 34]] } };
+lr = await post("/api/ask", { question: "Puls mot höjd?", context: askCtx });
+assert.equal(lr.status, 400, "fråga utan nyckel");
+const keyEnv = { ...envDb, ANTHROPIC_API_KEY: "sk-test" };
+const ask = body => worker.fetch(req2("/api/ask", "POST", "https://x.workers.dev", JSON.stringify(body)), keyEnv);
+lr = await ask({ question: "Puls mot höjd?", context: askCtx }); const aj = await lr.json();
+console.log("fråga om pass".padEnd(22), lr.status, JSON.stringify(aj).slice(0, 70)); assert.equal(lr.status, 200); assert.ok(aj.answer.includes("fördröjning"));
+lr = await ask({ question: "Och sista km?", context: askCtx, history: [{ q: "Puls mot höjd?", a: "Svar 1" }] }); assert.equal(lr.status, 200, "följdfråga");
+lr = await ask({ question: "", context: askCtx }); assert.equal(lr.status, 400, "tom fråga");
+lr = await ask({ question: "x".repeat(1600), context: askCtx }); assert.equal(lr.status, 400, "för lång fråga");
+lr = await ask({ question: "Hur gick det?" }); assert.equal(lr.status, 400, "utan underlag");
+lr = await worker.fetch(req2("/api/ask", "POST", "https://evil.example", JSON.stringify({ question: "x", context: askCtx })), keyEnv); assert.equal(lr.status, 403, "fel ursprung");
+lr = await post("/api/items/ask/1001", { id: "1001", turns: [{ q: "a", a: "b" }] }, "PUT"); assert.equal(lr.status, 200, "spara samtal");
 globalThis.fetch = realFetch;
 
 console.log("\nAlla tester gick igenom.");

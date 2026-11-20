@@ -27,9 +27,10 @@ import C_ISSUES from "./client/besvar.client.js";
 import C_PLAN from "./client/plan.client.js";
 import C_CUSTOM from "./client/custom.client.js";
 import C_EXTRA from "./client/extra.client.js";
+import C_ASK from "./client/ask.client.js";
 import C_MAIN from "./client/main.client.js";
 
-const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_HRQ, C_VIEWS, C_ISSUES, C_PLAN, C_CUSTOM, C_EXTRA, C_MAIN].join("\n"));
+const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_HRQ, C_VIEWS, C_ISSUES, C_PLAN, C_CUSTOM, C_EXTRA, C_ASK, C_MAIN].join("\n"));
 
 // ---------- Cloudflare Access ----------
 let certCache = { keys: null, at: 0 };
@@ -469,7 +470,7 @@ async function storageStatus(env) {
 }
 
 // Egna poster utan tidsgräns: pulskontroll per pass och besvär
-const ITEM_KINDS = { hrcheck: 16 * 1024, issue: 64 * 1024, suggest: 32 * 1024 };
+const ITEM_KINDS = { hrcheck: 16 * 1024, issue: 64 * 1024, suggest: 32 * 1024, ask: 96 * 1024 };
 const ITEM_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const SETTING_KEY = /^[a-z0-9_-]{1,64}$/;
 const MAX_SETTING_BYTES = 64 * 1024;
@@ -604,6 +605,67 @@ async function suggestSession(env, body) {
   return { suggestion: use.input, model: j.model, usage: j.usage || null };
 }
 
+// ---------- Frågor om ett pass (Claude) ----------
+// Sidan skickar frågan, tidigare frågor och svar i samma samtal och ett underlag den själv räknat fram
+// ur passet: mått, en nedsamplad tidsserie, splittar och liknande pass. Ingen position skickas.
+const ASK_SYSTEM = [
+  "Du är en erfaren tränare och dataanalytiker som hjälper en person att förstå ett enskilt träningspass från en Garmin-klocka.",
+  "Underlaget är JSON som personens egen sida har räknat fram:",
+  "- pass: passets mått. Tider i minuter, distans i km, fart i m/s, pulszoner som minuter i zon 1–5, trimp_edwards = minuter i zon × zonnummer.",
+  "- atlet: maxpuls och vilopuls med källa.",
+  "- tidsserie: medelvärden per tidsfönster (steg_sek). Kolumnen sek är sekunder från start. puls är rensad: störningar och orimliga värden är borttagna och står som null. hojd_m är höjd över havet, fart_m_s är fart, kadens är steg per minut för löpning och gång och varv per minut annars, distans_m är ackumulerad distans.",
+  "- splittar: per kilometer (cykel: per 5 km) med tid, tempo, puls och höjdmeter upp och ned.",
+  "- liknande_pass: upp till tio tidigare pass av samma typ, för jämförelse.",
+  "Regler:",
+  "1. Använd bara uppgifterna i underlaget. Hitta inte på mätvärden. Räkna gärna själv ur tidsserien och splittarna, och säg kort hur du räknade när det inte är självklart.",
+  "2. Svara på frågan direkt i första meningen. Peka sedan på konkreta ställen i passet med tid (t.ex. minut 12–15) eller kilometer.",
+  "3. Var ärlig om begränsningar: pulsen reagerar med 30–90 sekunders fördröjning, handledspuls är mindre exakt vid intervaller och styrka, barometrisk höjd kan driva, och tidsserien är medelvärden per fönster.",
+  "4. Saknas data för att svara, säg det och vad som skulle behövas.",
+  "5. Ställ inga diagnoser. Vid tecken som bröstsmärta, yrsel eller ovanligt hög puls i vila, föreslå att kontakta vården.",
+  "6. Skriv på svenska, kort och konkret, högst cirka 250 ord om personen inte ber om mer. Använd korta stycken och punktlistor. Inga tabeller.",
+].join("\n");
+
+function cleanHistory(h) {
+  if (!Array.isArray(h)) return [];
+  return h.slice(-6).filter(t => t && typeof t.q === "string" && typeof t.a === "string").map(t => ({ q: t.q.slice(0, 1500), a: t.a.slice(0, 6000) }));
+}
+
+async function askSession(env, body) {
+  if (!env.ANTHROPIC_API_KEY) throw new HttpError(400, "ANTHROPIC_API_KEY saknas i Cloudflare.");
+  const q = typeof body.question === "string" ? body.question.trim() : "";
+  if (!q) throw new HttpError(400, "Frågan saknas");
+  if (q.length > 1500) throw new HttpError(400, "Frågan är för lång");
+  if (!body.context || typeof body.context !== "object" || Array.isArray(body.context)) throw new HttpError(400, "Underlaget saknas");
+  const hist = cleanHistory(body.history);
+  const underlag = "Underlag:\n" + JSON.stringify(body.context);
+  const messages = [];
+  if (hist.length) {
+    hist.forEach((t, i) => {
+      messages.push({ role: "user", content: (i === 0 ? underlag + "\n\nFråga: " : "") + t.q });
+      messages.push({ role: "assistant", content: t.a });
+    });
+    messages.push({ role: "user", content: q });
+  } else {
+    messages.push({ role: "user", content: underlag + "\n\nFråga: " + q });
+  }
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY.trim(), "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim(),
+      max_tokens: 1500,
+      system: ASK_SYSTEM,
+      messages,
+    }),
+  });
+  const text = await r.text();
+  let j = null; try { j = JSON.parse(text); } catch (e) {}
+  if (!r.ok) throw new HttpError(502, "Claude svarade HTTP " + r.status + ": " + ((j && j.error && j.error.message) || text.slice(0, 200)));
+  const answer = j && Array.isArray(j.content) ? j.content.filter(c => c.type === "text").map(c => c.text).join("\n").trim() : "";
+  if (!answer) throw new HttpError(502, "Claude gav inget svar");
+  return { answer, model: j.model, usage: j.usage || null };
+}
+
 function logRow(r) {
   let data = {}; try { data = JSON.parse(r.data); } catch (e) {}
   return { id: r.id, activityId: r.activity_id, date: r.date, name: r.name, data, createdAt: r.created_at, updatedAt: r.updated_at };
@@ -691,6 +753,10 @@ export default {
         return json({ ok: true });
       }
 
+      if (path === "/api/ask" && req.method === "POST") {
+        const body = await readJson(req, 200e3);
+        return json(await askSession(env, body));
+      }
       if (path === "/api/suggest" && req.method === "POST") {
         const body = await readJson(req, 40e3);
         return json(await suggestSession(env, body));
