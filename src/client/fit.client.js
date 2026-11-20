@@ -1,6 +1,7 @@
 // ---------- FIT-filen: puls och fart sekund för sekund ----------
 // Garmin skickar originalfilen, oftast som zip. Sidan packar upp den och läser record-meddelanden
-// (global 20): tid (253), puls (3), fart (6 eller 73) och distans (5).
+// (global 20): tid (253), puls (3), fart (6 eller 73), distans (5), höjd (2 eller 78), kadens (4),
+// effekt (7) och temperatur (13). Position läses inte.
 async function unzipFirst(buf){
   const u8 = new Uint8Array(buf), dv = new DataView(buf);
   if(!(u8[0] === 0x50 && u8[1] === 0x4b)) return buf;               // inte zip
@@ -57,6 +58,11 @@ function parseFit(buf){
           else if(f.num === 6 && f.size === 2) r.spd = v/1000;
           else if(f.num === 73 && f.size === 4) r.spd = v/1000;
           else if(f.num === 5 && f.size === 4) r.dist = v/100;
+          else if(f.num === 78 && f.size === 4) r.alt = v/5 - 500;             // enhanced_altitude
+          else if(f.num === 2 && f.size === 2 && r.alt == null) r.alt = v/5 - 500;
+          else if(f.num === 4 && f.size === 1) r.cad = v;
+          else if(f.num === 7 && f.size === 2) r.pwr = v;
+          else if(f.num === 13 && f.size === 1 && v !== 0x7F) r.temp = v > 127 ? v - 256 : v;
         }
         off += f.size;
       }
