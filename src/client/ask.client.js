@@ -41,14 +41,17 @@ function renderAskCard(x){
     let h = '<h2>Fråga Claude <small>om det här passet</small></h2>';
     h += '<div class="thread">' + turns.map(t => '<div class="q">' + esc(t.q) + '</div><div class="a">' + mdLite(t.a) + '</div>').join("") + '</div>';
     if(!turns.length) h += '<div class="chips" id="ask-presets">' + askPresets(x, has).map((p, i) => '<button class="chip" data-i="' + i + '">' + esc(p[0]) + '</button>').join("") + '</div>';
-    h += '<textarea id="ask-q" rows="2" maxlength="1500" placeholder="' + (turns.length ? 'Följdfråga …' : 'Fråga något om passet, t.ex. hur pulsen följde höjdkurvan') + '"></textarea>';
-    h += '<div class="btnrow" style="margin-top:8px"><button class="btn small" id="ask-go">Skicka</button>' + (turns.length ? '<button class="btn ghost small" id="ask-new">Nytt samtal</button>' : '') + '</div><div id="ask-status"></div>';
+    h += '<div id="ask-pending"></div>';
+    // Ett formulär, så att Skicka-knappen och tangentbordets Skicka fungerar även när tangentbordet är uppe på telefonen
+    h += '<form id="ask-form" novalidate><textarea id="ask-q" rows="2" maxlength="1500" enterkeyhint="send" placeholder="' + (turns.length ? 'Följdfråga …' : 'Fråga något om passet, t.ex. hur pulsen följde höjdkurvan') + '"></textarea>';
+    h += '<div class="btnrow" style="margin-top:8px"><button type="submit" class="btn small" id="ask-go">Skicka</button>' + (turns.length ? '<button type="button" class="btn ghost small" id="ask-new">Nytt samtal</button>' : '') + '</div></form><div id="ask-status"></div>';
     if(turns.length) h += '<div class="sub" style="margin-top:6px">' + esc([turns[turns.length-1].model, c.at ? dateTxt(new Date(c.at)) : ""].filter(Boolean).join(" · ")) + '<br>Svaren bygger på underlaget sidan räknar fram: passets mått, en nedsamplad tidsserie, splittar och liknande pass.</div>';
     el.innerHTML = h;
     const presets = askPresets(x, has);
     $$("#ask-presets .chip").forEach(b => b.onclick = () => send(presets[+b.dataset.i][1]));
-    $("#ask-go").onclick = () => send($("#ask-q").value);
-    $("#ask-q").onkeydown = e => { if(e.key === "Enter" && (e.metaKey || e.ctrlKey)) send($("#ask-q").value); };
+    $("#ask-form").onsubmit = e => { e.preventDefault(); send($("#ask-q").value); };
+    // Enter skickar, Skift+Enter ger ny rad
+    $("#ask-q").onkeydown = e => { if(e.key === "Enter" && !e.shiftKey && !e.isComposing){ e.preventDefault(); send($("#ask-q").value); } };
     if($("#ask-new")) $("#ask-new").onclick = async () => {
       delete ASK.conv[x.id]; draw();
       if(S.storage.db) api("/api/items/ask/" + encodeURIComponent(x.id), { method: "DELETE" }).catch(() => {});
@@ -56,23 +59,45 @@ function renderAskCard(x){
   };
   const send = async q => {
     q = String(q || "").trim();
-    if(!q || ASK.busy) return;
+    if(!q) return;
+    if(ASK.busy){ toast("Väntar fortfarande på förra svaret"); return; }
     ASK.busy = true;
-    const st = $("#ask-status"), go = $("#ask-go");
+    const go = $("#ask-go"), ta = $("#ask-q");
     if(go) go.disabled = true;
-    if(st) st.innerHTML = '<div class="note"><span class="spin"></span>Claude tittar på passet …</div>';
+    if(ta){ ta.value = ""; ta.blur(); }
+    // Frågan syns direkt, med en räknare medan Claude svarar
+    const t0 = Date.now();
+    const pend = $("#ask-pending");
+    if(pend) pend.innerHTML = '<div class="thread"><div class="q">' + esc(q) + '</div></div>';
+    const tick = () => { const st = $("#ask-status"); if(st && S.openId === x.id) st.innerHTML = '<div class="note"><span class="spin"></span>Claude tittar på passet … ' + Math.round((Date.now() - t0)/1000) + ' s</div>'; };
+    tick();
+    const timer = setInterval(tick, 1000);
+    if(pend) pend.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const limit = setTimeout(() => ctl && ctl.abort(), 150e3);
     try{
       const context = await askContext(x);
       const prev = ((ASK.conv[x.id] && ASK.conv[x.id].turns) || []).slice(-6).map(t => ({ q: t.q, a: t.a }));
-      const j = await api("/api/ask", { method: "POST", body: { question: q, history: prev, context } });
+      const r = await fetch("/api/ask", { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify({ question: q, history: prev, context }), signal: ctl ? ctl.signal : undefined });
+      let j = null; try{ j = await r.json(); }catch(e){}
+      if(!r.ok) throw new Error((j && j.error) || (r.status === 524 || r.status === 504 ? "Claude svarade inte i tid (HTTP " + r.status + "). Försök igen." : "HTTP " + r.status));
+      if(!j || !j.answer) throw new Error("Tomt svar från servern");
       const c = ASK.conv[x.id] || (ASK.conv[x.id] = { id: String(x.id), turns: [] });
       c.turns.push({ q, a: j.answer, model: j.model || "", at: Date.now() });
       c.turns = c.turns.slice(-ASK_MAX_TURNS); c.at = Date.now();
       askSave(String(x.id));
+      clearInterval(timer);
       draw();
+      // Visa början av det nya svaret
+      const as = $$("#askcard .a"); if(as.length) as[as.length-1].scrollIntoView({ block: "start", behavior: "smooth" });
     }catch(e){
-      if($("#ask-status")) $("#ask-status").innerHTML = '<div class="banner" style="margin-top:8px">' + esc(e.message) + '</div>';
+      clearInterval(timer);
+      const msg = e.name === "AbortError" ? "Inget svar på två och en halv minut. Försök igen." : e.message;
+      if($("#ask-pending")) $("#ask-pending").innerHTML = "";
+      if($("#ask-q") && !$("#ask-q").value) $("#ask-q").value = q;
+      if($("#ask-status")) $("#ask-status").innerHTML = '<div class="banner" style="margin-top:8px">' + esc(msg) + '</div>';
     }finally{
+      clearInterval(timer); clearTimeout(limit);
       ASK.busy = false;
       if($("#ask-go")) $("#ask-go").disabled = false;
     }
@@ -80,7 +105,7 @@ function renderAskCard(x){
   el.innerHTML = '<h2>Fråga Claude</h2><div class="note"><span class="spin"></span></div>';
   askLoad().then(draw);
   // Rita om när FIT-filen är läst, så att snabbfrågan om höjd dyker upp
-  loadFit(x.id).then(() => { const c = ASK.conv[x.id]; if(!(c && c.turns && c.turns.length)) draw(); }).catch(() => {});
+  loadFit(x.id).then(() => { const c = ASK.conv[x.id]; if(!ASK.busy && !(c && c.turns && c.turns.length)) draw(); }).catch(() => {});
 }
 
 // ---------- Underlaget ----------
