@@ -5,7 +5,8 @@
 //   GARMIN_API_KEY     din Garmin Personal API-nyckel
 //   POLICY_AUD         Application Audience (AUD) Tag från Cloudflare Access
 //   TEAM_DOMAIN        t.ex. https://ditt-team.cloudflareaccess.com
-//   ANTHROPIC_API_KEY  valfri: läser CrossFit-pass från skärmdumpar och ger passförslag
+//   ANTHROPIC_API_KEY  valfri: läser CrossFit-pass från skärmdumpar, ger passförslag och svarar på frågor om pass
+//   ANTHROPIC_MODEL    valfri: modell för Claude, standard claude-haiku-5-5
 //
 // En D1-databas med bindningen DB (se wrangler.toml) sparar de senaste två
 // månadernas pass och dygnsdata, och dina egna data utan tidsgräns.
@@ -28,9 +29,10 @@ import C_PLAN from "./client/plan.client.js";
 import C_CUSTOM from "./client/custom.client.js";
 import C_EXTRA from "./client/extra.client.js";
 import C_ASK from "./client/ask.client.js";
+import C_EXPORT from "./client/export.client.js";
 import C_MAIN from "./client/main.client.js";
 
-const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_HRQ, C_VIEWS, C_ISSUES, C_PLAN, C_CUSTOM, C_EXTRA, C_ASK, C_MAIN].join("\n"));
+const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_HRQ, C_VIEWS, C_ISSUES, C_PLAN, C_CUSTOM, C_EXTRA, C_ASK, C_EXPORT, C_MAIN].join("\n"));
 
 // ---------- Cloudflare Access ----------
 let certCache = { keys: null, at: 0 };
@@ -515,7 +517,7 @@ async function parseScreenshot(env, image) {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY.trim(), "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim(),
+      model: (env.ANTHROPIC_MODEL || "claude-haiku-5-5").trim(),
       max_tokens: 2500,
       tools: [PARSE_TOOL],
       tool_choice: { type: "tool", name: "spara_pass" },
@@ -589,7 +591,7 @@ async function suggestSession(env, body) {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY.trim(), "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim(),
+      model: (env.ANTHROPIC_MODEL || "claude-haiku-5-5").trim(),
       max_tokens: 2000,
       system: SUGGEST_SYSTEM,
       tools: [suggestTool(cats)],
@@ -655,7 +657,7 @@ async function askSession(env, body) {
   }
   // Nyare modeller tänker först, och tänkandet räknas in i max_tokens. Med för lite utrymme
   // tar tänkandet allt och inget svar blir kvar. Medelnivå räcker för frågor om ett pass och håller svarstiden nere.
-  const model = (env.ANTHROPIC_MODEL || "claude-sonnet-5-5").trim();
+  const model = (env.ANTHROPIC_MODEL || "claude-haiku-5-5").trim();
   const req = { model, max_tokens: 16000, system: ASK_SYSTEM, messages };
   if (/^claude-(sonnet|opus|haiku|fable|mythos)-5/.test(model)) req.output_config = { effort: "medium" };
   const payload = JSON.stringify(req);

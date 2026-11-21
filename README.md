@@ -5,7 +5,7 @@ Tims personliga webbplats. Första delen är en träningsdashboard som hämtar G
 Sidan har fyra flikar:
 
 - **Översikt:** dagens plan med vad du bör göra och undvika, utifrån mätvärdena, vilka kroppsdelar dina senaste pass belastat och dina besvär, förslag på pass från Persist-arkivet och passförslag från Claude, besvär med uppföljning, nyckeltal, återhämtning (HRV mot ditt band, vilopuls, sömn), form och trötthet, tid per vecka, monotoni och strain, pulszoner, kalender och senaste passen.
-- **Pass:** alla pass med sök, typfilter, sortering på valfritt mått och sparade vyer (filter, sortering och diagram). Varje pass öppnas med mått enligt passtypens profil, vilotid, puls och höjd över tid från FIT-filen (Banister TRIMP, aerob avkoppling), frågor till Claude om passet, jämförelse mot liknande pass, pulsdatans kvalitet, loggat CrossFit-pass och besvär kopplade till passet.
+- **Pass:** alla pass med sök, typfilter, sortering på valfritt mått och sparade vyer (filter, sortering och diagram). Varje pass öppnas med mått enligt passtypens profil, vilotid, puls och höjd över tid från FIT-filen (Banister TRIMP, aerob avkoppling), frågor till Claude om passet, export av all data för passet, jämförelse mot liknande pass, pulsdatans kvalitet, loggat CrossFit-pass och besvär kopplade till passet.
 - **Trender:** kort per passtyp, till exempel effektivitetsfaktor, puls vid fast tempo, löpvolym och intensitetsfördelning för löpning, och TRIMP, zon 4–5, benchmarks och rörelser för HIIT.
 - **Data:** lagring, vad Garmin svarar för dygnsdata, maxpuls, kontroll av pulsdatan, Persist-import, inställningar som JSON och datakartan.
 
@@ -21,13 +21,15 @@ Belastning (TRIMP) är Edwards TRIMP: varje minut i pulszon 1–5 ger 1–5 poä
 
 **Fråga Claude om ett pass.** Valfritt, kräver `ANTHROPIC_API_KEY`. I passvyn finns snabbfrågor (till exempel puls mot höjd) och en ruta för egna frågor och följdfrågor. Sidan skickar ett underlag den själv räknat fram ur passet: passets mått, en tidsserie med medelvärden per 5–30 sekunder (puls efter pulskontrollen, höjd, fart, kadens, effekt, temperatur och distans), splittar per kilometer (cykel per 5 km) och upp till tio liknande pass. Position skickas inte. Samtalet sparas per pass i tabellen `items`.
 
+**Exportera ett pass.** I passvyn skapar Exportera en JSON-fil med all data för passet: måtten, Garmins rådata, hela tidsserien ur FIT-filen med både rå och kontrollerad puls, splittar, pulskontroll, loggat pass, besvär och frågorna till Claude. Positionsfält tas bort. På telefonen kan filen delas direkt, till exempel till Claude.
+
 ## Struktur
 
 | Fil | Innehåll |
 | --- | --- |
 | `src/index.js` | Cloudflare Worker: Access-kontroll, Garmin, lagring i D1, loggade pass, Persist-arkivet, Claude |
 | `src/page.html` | Sidans HTML och CSS. Klientkoden läggs in där `/*APP*/` står |
-| `src/client/*.client.js` | Klientkoden: grunder, diagram, metriker, FIT-läsning, pulskontroll, vyer, besvär, dagens plan och passförslag, anpassning, loggning, frågor om pass, start |
+| `src/client/*.client.js` | Klientkoden: grunder, diagram, metriker, FIT-läsning, pulskontroll, vyer, besvär, dagens plan och passförslag, anpassning, loggning, frågor om pass, export, start |
 | `wrangler.toml` | Cloudflare-konfiguration |
 | `test/run.mjs` | Tester mot låtsade Garmin-, Access- och Claude-svar (`npm test`) |
 
@@ -43,6 +45,7 @@ Hemligheterna läggs in i Cloudflare under **Settings → Variables and Secrets*
 | `POLICY_AUD` | Application Audience (AUD) Tag från Cloudflare Access |
 | `TEAM_DOMAIN` | `https://<team>.cloudflareaccess.com` |
 | `ANTHROPIC_API_KEY` | Valfri. Läser CrossFit-pass från skärmdumpar, ger passförslag och svarar på frågor om pass. Skapas på console.anthropic.com och betalas per anrop |
+| `ANTHROPIC_MODEL` | Valfri, typ Text. Modellen för Claude. Standard är `claude-haiku-5-5`, som räcker och kostar en bråkdel av Sonnet |
 
 Utan `POLICY_AUD` och `TEAM_DOMAIN` svarar Workern 403 på allt. Varje förfrågan måste ha en giltig, signerad Access-token, så sidan är stängd även om Access av misstag stängs av.
 
