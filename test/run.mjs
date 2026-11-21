@@ -254,4 +254,13 @@ lr = await worker.fetch(req2("/api/ask", "POST", "https://evil.example", JSON.st
 lr = await post("/api/items/ask/1001", { id: "1001", turns: [{ q: "a", a: "b" }] }, "PUT"); assert.equal(lr.status, 200, "spara samtal");
 globalThis.fetch = realFetch;
 
+// Kartbitar: hämtas från OpenStreetMap med egen User-Agent, ogiltiga koordinater stoppas
+globalThis.fetch = async (url, opt={}) => { if(String(url).startsWith("https://tile.openstreetmap.org/")){ assert.equal(String(url), "https://tile.openstreetmap.org/12/2200/1200.png"); assert.ok(opt.headers["User-Agent"].includes("personal-webpage")); return new Response(new Uint8Array([137, 80, 78, 71])); } return realFetch(url, opt); };
+lr = await worker.fetch(req("/api/tile/12/2200/1200", good), envDb); assert.equal(lr.status, 200); assert.equal(lr.headers.get("content-type"), "image/png");
+lr = await worker.fetch(req("/api/tile/3/9/1", good), envDb); assert.equal(lr.status, 400, "utanför världen");
+lr = await worker.fetch(req("/api/tile/12/2200/1200", null), envDb); assert.equal(lr.status, 403, "kräver inloggning");
+const csp = (await worker.fetch(req("/", good), envDb)).headers.get("content-security-policy"); assert.ok(csp.includes("img-src data: 'self'"));
+console.log("kartbitar".padEnd(22), "ok");
+globalThis.fetch = realFetch;
+
 console.log("\nAlla tester gick igenom.");
