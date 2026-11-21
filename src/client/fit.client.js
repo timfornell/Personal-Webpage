@@ -1,7 +1,8 @@
 // ---------- FIT-filen: puls och fart sekund för sekund ----------
 // Garmin skickar originalfilen, oftast som zip. Sidan packar upp den och läser record-meddelanden
 // (global 20): tid (253), puls (3), fart (6 eller 73), distans (5), höjd (2 eller 78), kadens (4),
-// effekt (7) och temperatur (13). Position läses inte.
+// effekt (7), temperatur (13) och position (0 och 1). Positionen används bara till kartan i passvyn
+// och skickas aldrig vidare, varken till Claude eller i exporten.
 async function unzipFirst(buf){
   const u8 = new Uint8Array(buf), dv = new DataView(buf);
   if(!(u8[0] === 0x50 && u8[1] === 0x4b)) return buf;               // inte zip
@@ -63,6 +64,7 @@ function parseFit(buf){
           else if(f.num === 4 && f.size === 1) r.cad = v;
           else if(f.num === 7 && f.size === 2) r.pwr = v;
           else if(f.num === 13 && f.size === 1 && v !== 0x7F) r.temp = v > 127 ? v - 256 : v;
+          else if((f.num === 0 || f.num === 1) && f.size === 4 && v !== 0x7FFFFFFF){ const sv = v > 0x7FFFFFFF ? v - 4294967296 : v; r[f.num ? "lon" : "lat"] = sv * 180 / 2147483648; } // semicirklar
         }
         off += f.size;
       }
@@ -109,8 +111,9 @@ async function fetchFit(id){
   if(!r.ok){ let j = null; try{ j = await r.json(); }catch(e){} throw new Error((j && j.error) || ("HTTP " + r.status)); }
   return parseFit(await unzipFirst(await r.arrayBuffer()));
 }
-const FITC = {};
-async function loadFit(id){
-  if(!FITC[id]) FITC[id] = await fetchFit(id);
-  return FITC[id];
+// Filen hämtas en gång per pass, även när flera kort ber om den samtidigt
+const FITC = {}, FITP = {};
+function loadFit(id){
+  if(FITC[id]) return Promise.resolve(FITC[id]);
+  return FITP[id] || (FITP[id] = fetchFit(id).then(r => (FITC[id] = r)).finally(() => { delete FITP[id]; }));
 }

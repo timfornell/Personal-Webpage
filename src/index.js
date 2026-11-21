@@ -30,9 +30,10 @@ import C_CUSTOM from "./client/custom.client.js";
 import C_EXTRA from "./client/extra.client.js";
 import C_ASK from "./client/ask.client.js";
 import C_EXPORT from "./client/export.client.js";
+import C_MAP from "./client/map.client.js";
 import C_MAIN from "./client/main.client.js";
 
-const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_HRQ, C_VIEWS, C_ISSUES, C_PLAN, C_CUSTOM, C_EXTRA, C_ASK, C_EXPORT, C_MAIN].join("\n"));
+const PAGE = PAGE_HTML.replace("/*APP*/", () => [C_CORE, C_CHARTS, C_METRICS, C_FIT, C_HRQ, C_VIEWS, C_ISSUES, C_PLAN, C_CUSTOM, C_EXTRA, C_ASK, C_EXPORT, C_MAP, C_MAIN].join("\n"));
 
 // ---------- Cloudflare Access ----------
 let certCache = { keys: null, at: 0 };
@@ -713,7 +714,7 @@ function json(obj, status) {
 }
 
 const SECURITY_HEADERS = {
-  "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
   "cache-control": "no-store",
@@ -895,6 +896,18 @@ export default {
 
       if (req.method !== "GET") return json({ error: "Metoden stöds inte här" }, 405);
 
+      // Kartbitar från OpenStreetMap via Workern, så att sidan bara hämtar från sig själv
+      const tm = path.match(/^\/api\/tile\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})$/);
+      if (tm) {
+        const [z, x, y] = tm.slice(1).map(Number);
+        if (z > 19 || x >= 2 ** z || y >= 2 ** z) return json({ error: "Ogiltig kartbit" }, 400);
+        const r = await fetch("https://tile.openstreetmap.org/" + z + "/" + x + "/" + y + ".png", {
+          headers: { "User-Agent": "personal-webpage/1.0 (+https://github.com/timfornell/Personal-Webpage)" },
+          cf: { cacheTtl: 7 * 86400, cacheEverything: true },
+        });
+        if (!r.ok) return new Response(null, { status: r.status === 404 ? 404 : 502 });
+        return new Response(r.body, { headers: { "content-type": "image/png", "cache-control": "private, max-age=604800" } });
+      }
       if (path === "/api/activities") {
         const days = Math.min(Math.max(parseInt(url.searchParams.get("days") || "90", 10) || 90, 1), 3650);
         if (env.DB && days <= RETAIN_DAYS) {

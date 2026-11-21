@@ -29,6 +29,7 @@ function askPresets(x, has){
 
 function renderAskCard(x){
   const el = $("#askcard"); if(!el) return;
+  renderMapCard(x);
   renderExportCard(x);
   if(!S.claude){
     el.innerHTML = '<h2>Fråga Claude</h2><div class="sub">Lägg in ANTHROPIC_API_KEY som Secret i Cloudflare för att kunna ställa frågor om passet, se Data-fliken.</div>';
